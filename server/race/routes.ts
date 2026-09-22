@@ -21,7 +21,9 @@ import {
   hashEmail, saveRun, listRuns, getRun, dataDir, type RunRecord,
 } from "./store.js";
 import { normaliseWithSkill, skillConfigured } from "./claude.js";
-import { storeInfo, putTargets, fetchTargets, putScrape, fetchScrape } from "./db.js";
+import { storeInfo, putTargets, fetchTargets, putScrape, fetchScrape,
+         putPersona, fetchPersona } from "./db.js";
+import { buildPersona, personaConfigured } from "./persona.js";
 import { runScrape } from "./scrape.js";
 import { apifyConfigured } from "./apify.js";
 import { planTargets } from "./targets.js";
@@ -161,6 +163,7 @@ export function raceRouter(): Router {
         monthlyCap: VENDORS[v].monthlyCap,
       })),
       apify: { configured: apifyConfigured() },
+      persona: { ...personaConfigured(), model: process.env.RACE_PERSONA_MODEL ?? "claude-sonnet-5" },
       osintCredits: await osintCredits(),
       ledger: await ledgerSnapshot(),
       storage: storeInfo(),
@@ -446,6 +449,42 @@ export function raceRouter(): Router {
     res.json(scrape);
   }));
 
+  // ------------------------------------------------------------- step 4
+  // Attributes and the computed layer. Stops before categories — step 5 is
+  // frozen in the skill and has its own rules.
+  r.post("/subjects/:subjectId/persona", json(async (req, res) => {
+    const subjectId = String(req.params.subjectId).trim();
+    if (!/^P-\d{2,}$/.test(subjectId)) {
+      return res.status(400).json({ error: "subjectId must look like P-20" });
+    }
+    const cfg = personaConfigured();
+    if (!cfg.ok) return res.status(503).json({ error: cfg.reason });
+
+    const index = (await listRuns(500)) as any[];
+    const row = index.find((r) => r.subjectId === subjectId && r.status === "completed");
+    if (!row) return res.status(409).json({ error: "no completed step 1 run for this subject" });
+
+    const run = withViews(await getRun(row.runId));
+    if (!run?.views) return res.status(409).json({ error: "that run has no views to reason from" });
+
+    const persona = await buildPersona({
+      subjectId,
+      useCase: run.useCase, sector: run.sector, ticketBand: run.ticketBand,
+      views: run.views,
+      plan: await fetchTargets(subjectId),
+      scrape: await fetchScrape(subjectId),
+    });
+
+    const storedIn = await putPersona(subjectId, persona);
+    res.json({ ...persona, storedIn });
+  }));
+
+  r.get("/subjects/:subjectId/persona", json(async (req, res) => {
+    const persona = await fetchPersona(String(req.params.subjectId).trim());
+    if (!persona) return res.status(404).json({ error: "no persona yet — run step 4" });
+    res.json(persona);
+  }));
+
   r.get("/subjects/:subjectId/targets", json(async (req, res) => {
     const plan = await fetchTargets(String(req.params.subjectId).trim());
     if (!plan) return res.status(404).json({ error: "no plan yet — run step 2" });
@@ -475,6 +514,7 @@ export function raceRouter(): Router {
       run: withViews(await getRun(row.runId)),
       plan: await fetchTargets(subjectId),
       scrape: await fetchScrape(subjectId),
+      persona: await fetchPersona(subjectId),
     });
   }));
 

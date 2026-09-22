@@ -51,6 +51,7 @@ let initialised = false;
 const RUNS_COLLECTION = "race_runs";
 const TARGETS_COLLECTION = "race_targets";
 const SCRAPES_COLLECTION = "race_scrapes";
+const PERSONAS_COLLECTION = "race_personas";
 
 function appletConfig(): {
   projectId?: string;
@@ -135,6 +136,7 @@ function ensureDirs() {
   fs.mkdirSync(RUNS_DIR, { recursive: true });
   fs.mkdirSync(path.join(DATA_DIR, "targets"), { recursive: true });
   fs.mkdirSync(path.join(DATA_DIR, "scrapes"), { recursive: true });
+  fs.mkdirSync(path.join(DATA_DIR, "personas"), { recursive: true });
 }
 
 async function writeAtomic(file: string, data: string) {
@@ -344,6 +346,34 @@ export async function fetchScrape(subjectId: string): Promise<any | null> {
     }
   }
   return readJsonFile(path.join(DATA_DIR, "scrapes", `${subjectId}.json`), null);
+}
+
+/** Step 4 output, one current persona per subject. */
+export async function putPersona(subjectId: string, persona: any): Promise<Backend> {
+  if (backend === "firestore" && firestore) {
+    try {
+      await setDoc(doc(firestore, PERSONAS_COLLECTION, subjectId),
+                   JSON.parse(JSON.stringify(persona)));
+      return "firestore";
+    } catch (err: any) {
+      console.warn(`[race] Firestore putPersona error: ${err?.message}; falling back to filesystem`);
+    }
+  }
+  await writeAtomic(path.join(DATA_DIR, "personas", `${subjectId}.json`),
+                    JSON.stringify(persona, null, 2));
+  return "filesystem";
+}
+
+export async function fetchPersona(subjectId: string): Promise<any | null> {
+  if (backend === "firestore" && firestore) {
+    try {
+      const snap = await getDoc(doc(firestore, PERSONAS_COLLECTION, subjectId));
+      return snap.exists() ? snap.data() : null;
+    } catch (err: any) {
+      console.warn(`[race] Firestore fetchPersona error: ${err?.message}; falling back to filesystem`);
+    }
+  }
+  return readJsonFile(path.join(DATA_DIR, "personas", `${subjectId}.json`), null);
 }
 
 export function dataDir(): string {

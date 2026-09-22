@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useRaceRun, RaceRunPanel, StorageBadge, RunSpinner } from './RaceLiveRun';
 import { RaceTargets } from './RaceTargets';
 import { RaceScrape } from './RaceScrape';
+import { RacePersona } from './RacePersona';
 import { 
   ArrowLeft, 
   Users, 
@@ -70,6 +71,7 @@ export const InternalInsight: React.FC = () => {
           fromStore, start, loadSubject } = useRaceRun();
   const [loadedPlan, setLoadedPlan] = useState<any>(null);
   const [loadedScrape, setLoadedScrape] = useState<any>(null);
+  const [loadedPersona, setLoadedPersona] = useState<any>(null);
   /** The plan currently on screen, whether just run or loaded from storage. */
   const [activePlan, setActivePlan] = useState<any>(null);
   const isLive = selectedCapability === 'Customer Insight';
@@ -87,6 +89,7 @@ export const InternalInsight: React.FC = () => {
     setLoadedPlan(b.plan ?? null);
     setActivePlan(b.plan ?? null);
     setLoadedScrape(b.scrape ?? null);
+    setLoadedPersona(b.persona ?? null);
     if (b.email) setContactEmail(b.email);
     const r = b.run ?? {};
     if (r.sector && ['Automobile', 'Luxury Watch', 'Real Estate'].includes(r.sector)) {
@@ -363,7 +366,8 @@ export const InternalInsight: React.FC = () => {
                   disabled={isLive && (busy || !emailValid)}
                   onClick={() => {
                     if (!isLive) return; // still a scoping placeholder for the other two
-                    setLoadedPlan(null); setActivePlan(null); setLoadedScrape(null);
+                    setLoadedPlan(null); setActivePlan(null);
+                    setLoadedScrape(null); setLoadedPersona(null);
                     start({ email: contactEmail, sector, ticketBand: ticketPrice,
                             useCase: 'customer_insight' });
                   }}
@@ -413,17 +417,12 @@ export const InternalInsight: React.FC = () => {
                     onComplete={setLoadedScrape}
                   />
 
-                  {/* Step 4 — unlocked by step 3, not built yet. Shown disabled so
-                      the sequence is legible rather than implied. */}
-                  <button
-                    type="button" disabled
-                    className="w-full py-2.5 rounded-lg font-bold text-xs bg-neutral-100 text-neutral-400 border border-neutral-200 cursor-not-allowed"
-                    id="race_step4_btn"
-                  >
-                    {loadedScrape
-                      ? 'Build Persona — Step 4 (not built yet)'
-                      : 'Build Persona — Step 4 (complete step 3 first)'}
-                  </button>
+                  {/* Step 4 — attributes and the computed layer. */}
+                  <RacePersona
+                    subjectId={run.subjectId}
+                    enabled={Boolean(loadedScrape)}
+                    initialPersona={loadedPersona}
+                  />
                 </>
               )}
 
