@@ -123,7 +123,12 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // 7. Test connection probe (/test/{testId})
+    // 7. RACE Scrapes (/race_scrapes/{docId})
+    match /race_scrapes/{docId} {
+      allow read, write: if true;
+    }
+
+    // 8. Test connection probe (/test/{testId})
     match /test/{testId} {
       allow read, write: if true;
     }

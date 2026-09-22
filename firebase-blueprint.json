@@ -226,6 +226,38 @@
         }
       },
       "required": ["subjectId", "sourceRunId"]
+    },
+    "RaceScrape": {
+      "title": "RACE Scrape Record",
+      "description": "Scrape execution and actor run result data for a subject target",
+      "type": "object",
+      "properties": {
+        "docId": {
+          "type": "string",
+          "description": "Unique scrape document identifier"
+        },
+        "subjectId": {
+          "type": "string",
+          "description": "Target subject identifier"
+        },
+        "targetId": {
+          "type": "string",
+          "description": "Identifier of the target surface being scraped"
+        },
+        "actor": {
+          "type": "string",
+          "description": "Apify or vendor actor used for scraping"
+        },
+        "status": {
+          "type": "string",
+          "description": "Execution status of the scrape operation"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when scrape was executed"
+        }
+      },
+      "required": ["subjectId"]
     }
   },
   "firestore": {
@@ -252,6 +284,10 @@
     "/race_targets/{targetId}": {
       "schema": "RaceTarget",
       "description": "Planned scrape targets per subject"
+    },
+    "/race_scrapes/{docId}": {
+      "schema": "RaceScrape",
+      "description": "Collection of executed scrape records and target results"
     }
   }
 }
