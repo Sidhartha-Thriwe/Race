@@ -56,10 +56,16 @@ export async function raceFetch<T>(
     return {
       ok: false,
       error: `Server returned ${res.status} as ${type || 'an unknown type'}, not JSON.`,
-      hint: body.trimStart().startsWith('<')
-        ? 'The server sent an HTML page — the API route failed or does not exist. ' +
-          'Check the server logs for the underlying error.'
-        : body || undefined,
+      hint: res.status === 502 || res.status === 504
+        // The proxy in front of Cloud Run gave up before the server did. The
+        // work is very likely still running and will finish — re-running would
+        // pay for it a second time.
+        ? 'The gateway timed out before the server finished. The work is probably ' +
+          'still running — wait a moment and reload rather than starting again.'
+        : body.trimStart().startsWith('<')
+          ? 'The server sent an HTML page — the API route failed or does not exist. ' +
+            'Check the server logs for the underlying error.'
+          : body || undefined,
     };
   }
 

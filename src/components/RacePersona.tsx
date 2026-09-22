@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Loader2, AlertTriangle, Download, Sparkles, Info, Key, Check } from 'lucide-react';
 import { raceFetch } from './raceApi';
 
@@ -21,6 +21,9 @@ type Attribute = { label: string; value: string; confidence: string; basis: stri
 
 export type Persona = {
   subjectId: string; model: string; createdAt: string;
+  /** Absent on personas written before step 4 became asynchronous. */
+  status?: 'running' | 'completed' | 'failed';
+  error?: string;
   attributeGroups: { group: string; attributes: Attribute[] }[];
   computedTraits?: any;
   identityLocation?: string;
@@ -67,18 +70,30 @@ export const RacePersona: React.FC<{
     });
   }, []);
 
+  const timer = useRef<number | null>(null);
+  useEffect(() => () => { if (timer.current) window.clearInterval(timer.current); }, []);
+
+  /**
+   * Start, then poll.
+   *
+   * Opus takes around 160 seconds on a subject this size. Holding the request
+   * open for that long put it through whatever proxy fronts Cloud Run, which
+   * cut the connection and returned an HTML 502 — while the work completed fine
+   * server-side. So the button kicks the job off and this watches the record.
+   */
   const run = async (overrideWorkspace?: string) => {
     setBusy(true); setError(null); setHint(null); setPersona(null);
     const ws = (overrideWorkspace !== undefined ? overrideWorkspace : workspaceInput).trim();
     if (ws) {
       sessionStorage.setItem('anthropic_workspace_id', ws);
     }
-    const res = await raceFetch<Persona>(`/api/race/subjects/${subjectId}/persona`, {
+
+    const res = await raceFetch<any>(`/api/race/subjects/${subjectId}/persona`, {
       method: 'POST',
       body: ws ? { workspaceId: ws } : {},
     });
-    setBusy(false);
-    if (!res.ok || !res.data) {
+    if (!res.ok) {
+      setBusy(false);
       setError(res.error ?? 'request failed');
       setHint(res.hint ?? null);
       if (res.needsWorkspaceId || /anthropic-workspace-id|workspace/i.test(res.error ?? '')) {
@@ -87,8 +102,16 @@ export const RacePersona: React.FC<{
       return;
     }
     setShowWorkspacePrompt(false);
-    setPersona(res.data);
-    setTab('table');
+
+    timer.current = window.setInterval(async () => {
+      const r = await raceFetch<Persona>(`/api/race/subjects/${subjectId}/persona`);
+      if (!r.ok || !r.data) return;           // a dropped poll is not a failed run
+      if (r.data.status === 'running') return;
+      if (timer.current) window.clearInterval(timer.current);
+      setBusy(false);
+      if (r.data.status === 'failed') setError(r.data.error ?? 'persona synthesis failed');
+      else { setPersona(r.data); setTab('table'); }
+    }, 5000);
   };
 
   const handleSaveAndRun = async () => {
@@ -167,7 +190,9 @@ export const RacePersona: React.FC<{
         id="race_step4_btn"
       >
         {busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-        <span>{busy ? 'Synthesising persona…' : 'Step 4 Build Attributes'}</span>
+        <span>
+          {busy ? 'Synthesising persona — this takes 2–3 minutes…' : 'Step 4 Build Attributes'}
+        </span>
       </button>
 
       <div className="flex items-center justify-between text-[10px] text-neutral-400 px-1">

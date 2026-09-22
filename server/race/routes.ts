@@ -481,17 +481,45 @@ export function raceRouter(): Router {
       await saveWorkspaceId(incomingWorkspace);
     }
 
-    const persona = await buildPersona({
-      subjectId,
-      useCase: run.useCase, sector: run.sector, ticketBand: run.ticketBand,
-      views: run.views,
-      plan: await fetchTargets(subjectId),
-      scrape: await fetchScrape(subjectId),
-      workspaceId: incomingWorkspace,
+    // Answer now, work after.
+    //
+    // Opus takes around 160 seconds on a subject this size, and holding the
+    // connection open for that long put the response through whatever proxy
+    // sits in front of Cloud Run — which cut it and returned an HTML 502 while
+    // the work carried on server-side and completed fine. The client had no way
+    // to know it had succeeded, and re-running would have paid for it twice.
+    //
+    // Same shape as step 1: mark it running, return, poll the record.
+    const startedAt = new Date().toISOString();
+    await putPersona(subjectId, {
+      subjectId, model: process.env.RACE_PERSONA_MODEL ?? "claude-sonnet-5",
+      status: "running", startedAt, attributeGroups: [],
+      audit: { attributes: 0, byBand: {}, weakBasisLines: 0, identityScrubbed: 0 },
+      steps: [{ t: startedAt, level: "info", msg: "Persona synthesis started" }],
     });
+    res.status(202).json({ subjectId, status: "running", startedAt });
 
-    const storedIn = await putPersona(subjectId, persona);
-    res.json({ ...persona, storedIn });
+    try {
+      const persona = await buildPersona({
+        subjectId,
+        useCase: run.useCase, sector: run.sector, ticketBand: run.ticketBand,
+        views: run.views,
+        plan: await fetchTargets(subjectId),
+        scrape: await fetchScrape(subjectId),
+        workspaceId: incomingWorkspace,
+      });
+      await putPersona(subjectId, { ...persona, status: "completed", startedAt });
+    } catch (e: any) {
+      const message = `${e?.name ?? "Error"}: ${e?.message ?? String(e)}`;
+      console.error("[race] persona failed:", message);
+      await putPersona(subjectId, {
+        subjectId, model: process.env.RACE_PERSONA_MODEL ?? "claude-sonnet-5",
+        status: "failed", startedAt, finishedAt: new Date().toISOString(),
+        error: message, attributeGroups: [],
+        audit: { attributes: 0, byBand: {}, weakBasisLines: 0, identityScrubbed: 0 },
+        steps: [{ t: new Date().toISOString(), level: "error", msg: message }],
+      });
+    }
   }));
 
   r.post("/config/workspace", json(async (req, res) => {
