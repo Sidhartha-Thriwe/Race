@@ -69,7 +69,7 @@ export const InternalInsight: React.FC = () => {
   // The live engine. Customer Insight runs for real; the other two capabilities
   // are still scoping placeholders, so the CTA keeps its old no-op there.
   const { run, busy, error, hint, storage, subjects, estimateINR, spentThisMonth,
-          bte, fromStore, start, loadSubject } = useRaceRun();
+          bte, configuredVendors, fromStore, start, loadSubject } = useRaceRun();
   const [loadedPlan, setLoadedPlan] = useState<any>(null);
   const [loadedScrape, setLoadedScrape] = useState<any>(null);
   const [loadedPersona, setLoadedPersona] = useState<any>(null);
@@ -374,8 +374,13 @@ export const InternalInsight: React.FC = () => {
                     if (!isLive) return; // still a scoping placeholder for the other two
                     setLoadedPlan(null); setActivePlan(null);
                     setLoadedScrape(null); setLoadedPersona(null);
+                    setActivePersona(null); setLoadedCategories(null);
+                    // Every configured vendor, named explicitly. See the note on
+                    // start(): letting the ticket band pick the set means a low
+                    // band silently captures from one vendor instead of both.
                     start({ email: contactEmail, sector, ticketBand: ticketPrice,
-                            useCase: 'customer_insight' });
+                            useCase: 'customer_insight',
+                            vendors: configuredVendors });
                   }}
                   className={`py-3 px-4 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 active:scale-99 ${
                     isLive && (busy || !emailValid)
@@ -392,38 +397,12 @@ export const InternalInsight: React.FC = () => {
                       ? 'Fetching and storing…'
                       : isLive
                         ? `${stored ? 'Re-run' : currentCapabilityMeta?.actionVerb}` +
+                          (configuredVendors.length > 1 ? ` · ${configuredVendors.length} sources` : '') +
                           (estimateINR ? ` · ₹${estimateINR.toFixed(2)}` : '')
                         : currentCapabilityMeta?.actionVerb || 'Execute'}
                   </span>
                 </button>
               </div>
-
-              {/*
-                * The screening pass — one vendor, ₹0.34.
-                *
-                * Behind the Email is ~180x cheaper than OSINT Industries, so a
-                * one-call look is the honest way to check an address before
-                * spending on the full set. It is marked as screening, so it
-                * never becomes the evidence base steps 4 and 5 reason from.
-                */}
-              {isLive && bte?.ok && emailValid && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => start({
-                    email: contactEmail, sector, ticketBand: ticketPrice,
-                    useCase: 'customer_insight',
-                    vendors: ['behind_the_email'],
-                  })}
-                  className={`w-full py-2 rounded-lg font-bold text-[11px] border transition-all ${
-                    busy
-                      ? 'bg-neutral-100 text-neutral-400 border-neutral-200 cursor-not-allowed'
-                      : 'bg-white text-neutral-700 border-neutral-300 hover:bg-neutral-50 cursor-pointer'}`}
-                  id="race_screen_btn"
-                >
-                  Screening pass — Behind the Email only · ₹0.34
-                </button>
-              )}
 
               {isLive && (
                 <p className="text-[10px] text-neutral-400 text-center">

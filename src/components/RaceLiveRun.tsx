@@ -26,6 +26,8 @@ export type Views = {
              date?: string; body?: string }[];
   counts: { modules: number; registered: number; rich: number;
             breached: number; timelineEvents: number; geo: number; reviews: number };
+  bySource?: Record<string, { rich: number; registered: number; breached: number }>;
+  corroborated?: string[];
 };
 
 export type Run = {
@@ -54,6 +56,8 @@ export function useRaceRun() {
   const [estimateINR, setEstimateINR] = useState<number | null>(null);
   const [spentThisMonth, setSpentThisMonth] = useState<number | null>(null);
   const [bte, setBte] = useState<{ ok: boolean; version?: string; error?: string } | null>(null);
+  /** Vendors with a key configured — the CTA calls exactly these, by name. */
+  const [configuredVendors, setConfiguredVendors] = useState<string[]>([]);
   /** True when what is on screen came from storage rather than a live call. */
   const [fromStore, setFromStore] = useState(false);
   const timer = useRef<number | null>(null);
@@ -64,6 +68,7 @@ export function useRaceRun() {
       setStorage(st.data.storage ?? null);
       setBte(st.data.bte ?? null);
       const configured = (st.data.vendors ?? []).filter((v: any) => v.configured);
+      setConfiguredVendors(configured.map((v: any) => v.vendor));
       setEstimateINR(configured.reduce((a: number, v: any) => a + (v.costINR ?? 0), 0));
       const month = new Date().toISOString().slice(0, 7);
       const ledger = st.data.ledger ?? {};
@@ -100,15 +105,20 @@ export function useRaceRun() {
   }, []);
 
   /**
-   * `vendors` narrows the call to a named subset and marks the run as a
-   * screening pass, which keeps it out of the "latest completed run" lookup
-   * that steps 4 and 5 reason from. A one-vendor pass is a cheap look, not a
-   * capture, and letting it stand in for one would be the same bug this
-   * pipeline keeps producing.
+   * `vendors` names the vendors to call, bypassing routing.
+   *
+   * The CTA passes every configured vendor explicitly rather than letting the
+   * ticket band choose a set, because the band quietly changes the answer: a
+   * low band routes to the one-vendor screening set, and a capture built on one
+   * vendor is not the same evidence as one built on both — but it looks
+   * identical three steps later in a persona.
+   *
+   * `screening` is separate, and only a deliberate cheap look sets it. It keeps
+   * the run out of the "latest completed run" lookup steps 4 and 5 read from.
    */
   const start = useCallback(async (opts: {
     email: string; sector?: string; ticketBand?: string; useCase?: string;
-    vendors?: string[];
+    vendors?: string[]; screening?: boolean;
   }) => {
     setError(null); setHint(null); setRun(null); setBusy(true); setFromStore(false);
     const res = await raceFetch<any>('/api/race/run', {
@@ -119,7 +129,8 @@ export function useRaceRun() {
         sector: opts.sector,
         ticketBand: opts.ticketBand,
         consentBasis: 'Opt-in: internal employee, consent on file',
-        ...(opts.vendors?.length ? { vendors: opts.vendors, screening: true } : {}),
+        ...(opts.vendors?.length ? { vendors: opts.vendors } : {}),
+        ...(opts.screening ? { screening: true } : {}),
       },
     });
     if (!res.ok || !res.data) {
@@ -143,7 +154,7 @@ export function useRaceRun() {
   }, [refreshMeta]);
 
   return { run, busy, error, hint, storage, subjects, estimateINR, bte,
-           spentThisMonth, fromStore, start, loadSubject, refreshMeta };
+           configuredVendors, spentThisMonth, fromStore, start, loadSubject, refreshMeta };
 }
 
 export const StorageBadge: React.FC<{ storage: { backend: string } | null }> = ({ storage }) =>
@@ -199,6 +210,28 @@ export const RaceRunPanel: React.FC<{
                 : `Data fetched and stored successfully against ${run!.subjectId}`}
             </span>
           </div>
+          {/*
+            * Which vendor found what, and what both found.
+            *
+            * A merged total hides the thing a reader most needs: two vendors
+            * agreeing on a platform is stronger evidence than one reporting it,
+            * and a single "35 platforms" figure cannot tell corroboration from
+            * coverage. It is also the only way to see at a glance that both
+            * sources actually ran.
+            */}
+          {run!.views?.bySource && (
+            <p className="text-[10px] text-emerald-800 pl-5">
+              {Object.entries(run!.views.bySource as Record<string, { rich: number; registered: number; breached: number }>)
+                .filter(([, c]) => c.rich || c.registered || c.breached)
+                .map(([v, c]) =>
+                  `${v === 'behind_the_email' ? 'Behind the Email' : 'OSINT Industries'}: ` +
+                  `${c.rich} detailed, ${c.registered} registered, ${c.breached} breaches`)
+                .join('  ·  ')}
+              {run!.views.corroborated?.length
+                ? `  ·  both vendors: ${run!.views.corroborated.join(', ')}`
+                : ''}
+            </p>
+          )}
           <p className="text-[10px] text-emerald-800 pl-5 font-medium">
             {email} · {run!.views?.counts.modules ?? run!.summary?.platformCount ?? 0} modules
             {run!.views ? ` · ${run!.views.counts.rich} detailed · ${run!.views.counts.breached} breaches` : ''}
