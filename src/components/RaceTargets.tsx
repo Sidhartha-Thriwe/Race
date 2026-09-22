@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Loader2, AlertTriangle, Crosshair, Download, Info } from 'lucide-react';
 import { raceFetch } from './raceApi';
 
@@ -33,13 +33,18 @@ const STATUS_STYLE: Record<Ready['status'], string> = {
   'unproven-contested': 'bg-amber-50 border-amber-200 text-amber-700',
 };
 
-export const RaceTargets: React.FC<{ subjectId: string; enabled: boolean }> = ({
-  subjectId, enabled,
-}) => {
-  const [plan, setPlan] = useState<Plan | null>(null);
+export const RaceTargets: React.FC<{
+  subjectId: string; enabled: boolean;
+  /** A plan loaded alongside a stored subject, so step 2 shows without re-running. */
+  initialPlan?: Plan | null;
+}> = ({ subjectId, enabled, initialPlan }) => {
+  const [plan, setPlan] = useState<Plan | null>(initialPlan ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'ready' | 'blocked' | 'noRoute' | 'identifiers'>('ready');
+
+  // A freshly loaded subject brings its stored plan with it.
+  useEffect(() => { setPlan(initialPlan ?? null); setError(null); }, [initialPlan, subjectId]);
 
   const [hint, setHint] = useState<string | null>(null);
 

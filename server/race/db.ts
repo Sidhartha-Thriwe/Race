@@ -263,18 +263,23 @@ export async function queryRuns(limitCount: number): Promise<any[]> {
 }
 
 /** Step 2 plans, keyed by subject id — one current plan per subject. */
-export async function putTargets(subjectId: string, plan: any): Promise<void> {
+export async function putTargets(subjectId: string, plan: any): Promise<Backend> {
   if (backend === "firestore" && firestore) {
     try {
       await setDoc(doc(firestore, TARGETS_COLLECTION, subjectId),
                    JSON.parse(JSON.stringify(plan)));
-      return;
+      return "firestore";
     } catch (err: any) {
       console.warn(`[race] Firestore putTargets error: ${err?.message}; falling back to filesystem`);
     }
   }
+  // The fallback keeps the app working, but the caller must be able to say so.
+  // A write that quietly lands on an ephemeral disk while the UI reports
+  // success is the same "looks like it worked" failure as an empty vendor
+  // response — it only surfaces after a redeploy has thrown the data away.
   await writeAtomic(path.join(DATA_DIR, "targets", `${subjectId}.json`),
                     JSON.stringify(plan, null, 2));
+  return "filesystem";
 }
 
 export async function fetchTargets(subjectId: string): Promise<any | null> {

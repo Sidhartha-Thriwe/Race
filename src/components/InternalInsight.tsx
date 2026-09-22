@@ -12,7 +12,8 @@ import {
   Mail, 
   Shield, 
   Sparkles,
-  Info
+  Info,
+  Database
 } from 'lucide-react';
 
 export type CapabilityType = 'Customer Insight' | 'Lead Gen' | 'Lead Qualification';
@@ -64,9 +65,32 @@ export const InternalInsight: React.FC = () => {
 
   // The live engine. Customer Insight runs for real; the other two capabilities
   // are still scoping placeholders, so the CTA keeps its old no-op there.
-  const { run, busy, error, storage, start } = useRaceRun();
+  const { run, busy, error, hint, storage, subjects, estimateINR, spentThisMonth,
+          fromStore, start, loadSubject } = useRaceRun();
+  const [loadedPlan, setLoadedPlan] = useState<any>(null);
   const isLive = selectedCapability === 'Customer Insight';
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(contactEmail.trim());
+  const stored = subjects.find(
+    (s) => (s.email ?? '').toLowerCase() === contactEmail.trim().toLowerCase());
+
+  /**
+   * Loading a subject snaps the form back to the sector and ticket price that
+   * run actually used. Those inputs chose the vendor set, so showing the result
+   * under different ones would quietly misrepresent how it was produced.
+   */
+  const applyBundle = (b: any) => {
+    if (!b) return;
+    setLoadedPlan(b.plan ?? null);
+    if (b.email) setContactEmail(b.email);
+    const r = b.run ?? {};
+    if (r.sector && ['Automobile', 'Luxury Watch', 'Real Estate'].includes(r.sector)) {
+      setSector(r.sector as SectorType);
+      const options = SECTOR_TICKET_PRICES[r.sector as SectorType];
+      setTicketPrice(options.includes(r.ticketBand) ? r.ticketBand : options[0]);
+    } else if (r.ticketBand && SECTOR_TICKET_PRICES[sector].includes(r.ticketBand)) {
+      setTicketPrice(r.ticketBand);
+    }
+  };
 
   const handleSectorChange = (newSector: SectorType) => {
     setSector(newSector);
@@ -243,6 +267,40 @@ export const InternalInsight: React.FC = () => {
                 Present ONLY for Customer Insight and Lead Qualification.
                 NOT PRESENT AT ALL for Lead Gen (not hidden, not disabled, literally not rendered).
             */}
+            {/* Load a stored subject — free, no vendor call. Exists so testing and
+                demoing never has to re-bill an address already resolved. */}
+            {isLive && subjects.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-neutral-700 flex items-center gap-1.5">
+                  <Database size={13} className="text-neutral-500" />
+                  <span>Load stored subject</span>
+                  <span className="ml-auto text-[10px] font-medium text-neutral-400">free</span>
+                </label>
+                <select
+                  value=""
+                  disabled={busy}
+                  onChange={async (e) => {
+                    if (!e.target.value) return;
+                    const b = await loadSubject(e.target.value);
+                    applyBundle(b);
+                  }}
+                  className="w-full px-3.5 py-2.5 text-xs font-medium text-neutral-800 bg-white border border-neutral-300 rounded-lg shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-[#2563eb]/20 focus:border-[#2563eb] transition-all cursor-pointer disabled:bg-neutral-50"
+                  id="race-subject-picker"
+                >
+                  <option value="">Select a previously resolved subject…</option>
+                  {subjects.map((sub) => (
+                    <option key={sub.subjectId} value={sub.subjectId}>
+                      {sub.subjectId} · {sub.email ?? 'unknown'}
+                      {sub.lastRunAt ? ` · ${sub.lastRunAt.slice(0, 10)}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10.5px] text-neutral-400 font-medium">
+                  Loads the stored result and its scrape plan. Nothing is called and nothing billed.
+                </p>
+              </div>
+            )}
+
             {selectedCapability !== 'Lead Gen' && (
               <div className="space-y-1.5" id="contact-email-field-group">
                 <label 
@@ -269,34 +327,75 @@ export const InternalInsight: React.FC = () => {
 
             {/* CTA Button — Labeled with the real product's own action verb for this capability */}
             <div className="pt-3 border-t border-neutral-100 space-y-2">
-              <button
-                type="button"
-                disabled={isLive && (busy || !emailValid)}
-                onClick={() => {
-                  if (!isLive) return; // still a scoping placeholder for the other two
-                  start({ email: contactEmail, sector, ticketBand: ticketPrice,
-                          useCase: 'customer_insight' });
-                }}
-                className={`w-full py-3 px-4 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 active:scale-99 ${
-                  isLive && (busy || !emailValid)
-                    ? 'bg-neutral-100 text-neutral-400 border border-neutral-200 cursor-not-allowed'
-                    : 'bg-[#1e40af] hover:bg-[#1d4ed8] text-white cursor-pointer'
-                }`}
-                id="internal-insight-cta-btn"
-              >
-                {isLive && busy && <RunSpinner />}
-                <span>
-                  {isLive && busy
-                    ? 'Fetching and storing…'
-                    : currentCapabilityMeta?.actionVerb || 'Execute'}
-                </span>
-              </button>
+              {isLive && stored && (
+                <div className="px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg">
+                  <div className="text-[10.5px] font-bold text-neutral-700">
+                    Already resolved as {stored.subjectId}
+                  </div>
+                  <div className="text-[10px] text-neutral-500 mt-0.5">
+                    {stored.lastRunAt?.slice(0, 16).replace('T', ' ')}
+                    {stored.costINR != null && ` · ₹${stored.costINR.toFixed(2)} spent`}
+                  </div>
+                </div>
+              )}
 
-              {isLive && <RaceRunPanel run={run} error={error} email={contactEmail} storage={storage} />}
+              <div className={isLive && stored ? 'grid grid-cols-2 gap-2' : ''}>
+                {isLive && stored && (
+                  <button
+                    type="button" disabled={busy}
+                    onClick={async () => applyBundle(await loadSubject(stored.subjectId))}
+                    className="py-3 px-4 bg-[#1e40af] hover:bg-[#1d4ed8] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    id="race-load-stored-btn"
+                  >
+                    <Database size={13} />
+                    <span>Load stored result</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  disabled={isLive && (busy || !emailValid)}
+                  onClick={() => {
+                    if (!isLive) return; // still a scoping placeholder for the other two
+                    setLoadedPlan(null);
+                    start({ email: contactEmail, sector, ticketBand: ticketPrice,
+                            useCase: 'customer_insight' });
+                  }}
+                  className={`py-3 px-4 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 active:scale-99 ${
+                    isLive && (busy || !emailValid)
+                      ? 'bg-neutral-100 text-neutral-400 border border-neutral-200 cursor-not-allowed'
+                      : isLive && stored
+                        ? 'bg-white border border-neutral-300 text-neutral-800 hover:bg-neutral-50 cursor-pointer'
+                        : 'bg-[#1e40af] hover:bg-[#1d4ed8] text-white cursor-pointer'
+                  } ${isLive && stored ? '' : 'w-full'}`}
+                  id="internal-insight-cta-btn"
+                >
+                  {isLive && busy && <RunSpinner />}
+                  <span>
+                    {isLive && busy
+                      ? 'Fetching and storing…'
+                      : isLive
+                        ? `${stored ? 'Re-run' : currentCapabilityMeta?.actionVerb}` +
+                          (estimateINR ? ` · ₹${estimateINR.toFixed(2)}` : '')
+                        : currentCapabilityMeta?.actionVerb || 'Execute'}
+                  </span>
+                </button>
+              </div>
+
+              {isLive && spentThisMonth != null && (
+                <p className="text-[10px] text-neutral-400 text-center">
+                  ₹{spentThisMonth.toFixed(2)} spent this month
+                </p>
+              )}
+
+              {isLive && <RaceRunPanel run={run} error={error} hint={hint}
+                                       email={contactEmail} storage={storage}
+                                       fromStore={fromStore} />}
 
               {/* Step 2 — plan only. Enabled once step 1 has a subject id. */}
               {isLive && run?.subjectId && (
-                <RaceTargets subjectId={run.subjectId} enabled={run.status === 'completed'} />
+                <RaceTargets subjectId={run.subjectId} enabled={run.status === 'completed'}
+                             initialPlan={loadedPlan} />
               )}
 
               <div className="flex items-center justify-between text-[10.5px] text-neutral-400 font-medium px-1">

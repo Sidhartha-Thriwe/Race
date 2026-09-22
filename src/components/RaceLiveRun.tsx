@@ -35,66 +35,102 @@ export type Run = {
   error?: string;
 };
 
-const headers = (): Record<string, string> => {
-  const token = sessionStorage.getItem('race_token') ?? '';
-  return { 'Content-Type': 'application/json', ...(token ? { 'x-race-token': token } : {}) };
+import { raceFetch } from './raceApi';
+
+export type SubjectSummary = {
+  subjectId: string; email?: string; lastRunAt?: string; runId?: string;
+  modules?: string; costINR?: number;
 };
 
 export function useRaceRun() {
   const [run, setRun] = useState<Run | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
   const [storage, setStorage] = useState<{ backend: string } | null>(null);
+  const [subjects, setSubjects] = useState<SubjectSummary[]>([]);
+  const [estimateINR, setEstimateINR] = useState<number | null>(null);
+  const [spentThisMonth, setSpentThisMonth] = useState<number | null>(null);
+  /** True when what is on screen came from storage rather than a live call. */
+  const [fromStore, setFromStore] = useState(false);
   const timer = useRef<number | null>(null);
 
+  const refreshMeta = useCallback(async () => {
+    const st = await raceFetch<any>('/api/race/status');
+    if (st.ok && st.data) {
+      setStorage(st.data.storage ?? null);
+      const configured = (st.data.vendors ?? []).filter((v: any) => v.configured);
+      setEstimateINR(configured.reduce((a: number, v: any) => a + (v.costINR ?? 0), 0));
+      const month = new Date().toISOString().slice(0, 7);
+      const ledger = st.data.ledger ?? {};
+      setSpentThisMonth(
+        Object.entries(ledger)
+          .filter(([k]) => k.startsWith(month))
+          .reduce((a, [, v]: any) => a + (v?.spendINR ?? 0), 0),
+      );
+    }
+    const su = await raceFetch<any>('/api/race/subjects');
+    if (su.ok && su.data) setSubjects(su.data.subjects ?? []);
+  }, []);
+
   useEffect(() => {
-    fetch('/api/race/status', { headers: headers() })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d?.storage && setStorage(d.storage))
-      .catch(() => { /* the badge is a nicety, not a blocker */ });
+    refreshMeta();
     return () => { if (timer.current) window.clearInterval(timer.current); };
+  }, [refreshMeta]);
+
+  /**
+   * Load a stored subject. Free — no vendor call, nothing billed. This is the
+   * path for testing and for opening a demo on populated data rather than a
+   * spinner.
+   */
+  const loadSubject = useCallback(async (subjectId: string) => {
+    setBusy(true); setError(null); setHint(null); setRun(null);
+    const res = await raceFetch<any>(`/api/race/subjects/${subjectId}/bundle`);
+    setBusy(false);
+    if (!res.ok || !res.data) {
+      setError(res.error ?? 'could not load that subject'); setHint(res.hint ?? null);
+      return null;
+    }
+    setRun(res.data.run); setFromStore(true);
+    return res.data as { subjectId: string; email?: string; run: Run; plan: any };
   }, []);
 
   const start = useCallback(async (opts: {
     email: string; sector?: string; ticketBand?: string; useCase?: string;
   }) => {
-    setError(null); setRun(null); setBusy(true);
-    try {
-      const res = await fetch('/api/race/run', {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({
-          email: opts.email.trim(),
-          useCase: opts.useCase ?? 'customer_insight',
-          sector: opts.sector,
-          ticketBand: opts.ticketBand,
-          consentBasis: 'Opt-in: internal employee, consent on file',
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? `HTTP ${res.status}`); setBusy(false); return; }
-
-      setRun({ runId: data.runId, subjectId: data.subjectId, status: 'running',
-               costINR: 0, vendorsCalled: [], steps: [] });
-
-      // The run outlives the request — poll the record until it settles.
-      timer.current = window.setInterval(async () => {
-        try {
-          const r = await fetch(`/api/race/runs/${data.runId}`, { headers: headers() });
-          if (!r.ok) return;
-          const rec: Run = await r.json();
-          setRun(rec);
-          if (rec.status !== 'running') {
-            if (timer.current) window.clearInterval(timer.current);
-            setBusy(false);
-          }
-        } catch { /* a dropped poll is not a failed run */ }
-      }, 2000);
-    } catch (e: any) {
-      setError(e?.message ?? 'request failed'); setBusy(false);
+    setError(null); setHint(null); setRun(null); setBusy(true); setFromStore(false);
+    const res = await raceFetch<any>('/api/race/run', {
+      method: 'POST',
+      body: {
+        email: opts.email.trim(),
+        useCase: opts.useCase ?? 'customer_insight',
+        sector: opts.sector,
+        ticketBand: opts.ticketBand,
+        consentBasis: 'Opt-in: internal employee, consent on file',
+      },
+    });
+    if (!res.ok || !res.data) {
+      setError(res.error ?? 'request failed'); setHint(res.hint ?? null);
+      setBusy(false); return;
     }
-  }, []);
 
-  return { run, busy, error, storage, start };
+    const { runId, subjectId } = res.data;
+    setRun({ runId, subjectId, status: 'running', costINR: 0, vendorsCalled: [], steps: [] });
+
+    timer.current = window.setInterval(async () => {
+      const r = await raceFetch<Run>(`/api/race/runs/${runId}`);
+      if (!r.ok || !r.data) return;
+      setRun(r.data);
+      if (r.data.status !== 'running') {
+        if (timer.current) window.clearInterval(timer.current);
+        setBusy(false);
+        refreshMeta();
+      }
+    }, 2000);
+  }, [refreshMeta]);
+
+  return { run, busy, error, hint, storage, subjects, estimateINR,
+           spentThisMonth, fromStore, start, loadSubject, refreshMeta };
 }
 
 export const StorageBadge: React.FC<{ storage: { backend: string } | null }> = ({ storage }) =>
@@ -107,8 +143,9 @@ export const StorageBadge: React.FC<{ storage: { backend: string } | null }> = (
   ) : null;
 
 export const RaceRunPanel: React.FC<{
-  run: Run | null; error: string | null; email: string; storage: { backend: string } | null;
-}> = ({ run, error, email, storage }) => {
+  run: Run | null; error: string | null; hint?: string | null; email: string;
+  storage: { backend: string } | null; fromStore?: boolean;
+}> = ({ run, error, hint, email, storage, fromStore }) => {
   const dot = (l: Step['level']) =>
     l === 'error' ? 'bg-red-500' : l === 'warn' ? 'bg-amber-500' : 'bg-neutral-300';
   const done = run?.status === 'completed';
@@ -120,7 +157,10 @@ export const RaceRunPanel: React.FC<{
       {error && (
         <div className="flex items-start gap-2 px-3 py-2 bg-red-50 border border-red-100 rounded-lg">
           <AlertTriangle size={12} className="text-red-500 mt-0.5 shrink-0" />
-          <span className="text-[11px] text-red-700 font-medium">{error}</span>
+          <div>
+            <div className="text-[11px] text-red-700 font-medium">{error}</div>
+            {hint && <div className="text-[10px] text-red-600 mt-0.5">{hint}</div>}
+          </div>
         </div>
       )}
 
@@ -141,7 +181,9 @@ export const RaceRunPanel: React.FC<{
           <div className="flex items-center gap-2">
             <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
             <span className="text-[11px] font-bold text-emerald-900">
-              Data fetched and stored successfully against {run!.subjectId}
+              {fromStore
+                ? `Loaded stored result for ${run!.subjectId} — no vendor call`
+                : `Data fetched and stored successfully against ${run!.subjectId}`}
             </span>
           </div>
           <p className="text-[10px] text-emerald-800 pl-5 font-medium">

@@ -179,6 +179,45 @@ export async function saveRun(run: RunRecord): Promise<void> {
   }
 }
 
+/**
+ * Everyone already resolved, with enough detail to pick one from a list.
+ *
+ * Exists so an operator can load a stored subject instead of paying to resolve
+ * the same address again. Re-running should be a decision, not the only way to
+ * see a result.
+ */
+export async function subjectSummaries(): Promise<any[]> {
+  const map = await subjectIndex();
+  const runs = await queryRuns(500);
+
+  const latest = new Map<string, any>();
+  for (const r of runs) {
+    if (r?.status !== "completed") continue;
+    const seen = latest.get(r.subjectId);
+    if (!seen || String(r.startedAt) > String(seen.startedAt)) latest.set(r.subjectId, r);
+  }
+
+  const byId = new Map<string, string>();
+  for (const [email, id] of Object.entries(map.byEmail)) byId.set(id, email);
+
+  return [...new Set([...byId.keys(), ...latest.keys()])]
+    .sort()
+    .map((subjectId) => {
+      const run = latest.get(subjectId);
+      return {
+        subjectId,
+        email: byId.get(subjectId) ?? run?.email,
+        lastRunAt: run?.finishedAt ?? run?.startedAt,
+        runId: run?.runId,
+        modules: run?.vendors?.length
+          ? run.vendors.map((v: string) => v.split(":")[1]).filter(Boolean).join("+")
+          : undefined,
+        costINR: run?.costINR,
+      };
+    })
+    .filter((s) => s.runId);
+}
+
 export async function listRuns(limit = 50): Promise<any[]> {
   return queryRuns(limit);
 }

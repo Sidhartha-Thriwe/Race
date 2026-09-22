@@ -17,8 +17,8 @@ import {
   configuredVendors, osintCredits, VENDORS, type VendorName,
 } from "./vendors.js";
 import {
-  resolveSubjectId, subjectIndex, ledgerSnapshot, newRunId, hashEmail,
-  saveRun, listRuns, getRun, dataDir, type RunRecord,
+  resolveSubjectId, subjectIndex, subjectSummaries, ledgerSnapshot, newRunId,
+  hashEmail, saveRun, listRuns, getRun, dataDir, type RunRecord,
 } from "./store.js";
 import { normaliseWithSkill, skillConfigured } from "./claude.js";
 import { storeInfo, putTargets, fetchTargets } from "./db.js";
@@ -77,6 +77,33 @@ function withViews(run: any): any {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+/**
+ * Normalise and vet an address before spending money on it.
+ *
+ * A stray invisible character once turned gmail.com into the punycode domain
+ * gmail.xn--com-360a. It looked identical in the input box, passed a loose
+ * regex, cost a full vendor call, and returned a slightly different answer
+ * against what was effectively a different address. Catching it here costs
+ * nothing; catching it afterwards costs a vendor call and a phantom subject.
+ */
+function vetEmail(raw: unknown): { ok: boolean; email?: string; error?: string } {
+  if (typeof raw !== "string") return { ok: false, error: "email is required" };
+  const email = raw.normalize("NFKC").trim();
+
+  if (!email) return { ok: false, error: "email is required" };
+  if (/\s/.test(email)) return { ok: false, error: "email contains whitespace" };
+  if (/[^\x20-\x7E]/.test(email)) {
+    return { ok: false, error:
+      "email contains a non-ASCII or invisible character — retype it rather than pasting" };
+  }
+  if (/xn--/i.test(email)) {
+    return { ok: false, error:
+      "email domain is punycode (xn--), which usually means a stray character slipped in" };
+  }
+  if (!EMAIL_RE.test(email)) return { ok: false, error: "that is not a valid email address" };
+  return { ok: true, email: email.toLowerCase() };
+}
 
 /**
  * These endpoints return other people's personal data, and the app is deployed
@@ -157,8 +184,9 @@ export function raceRouter(): Router {
       if (!skill.ok) return res.status(503).json({ error: skill.reason });
     }
 
-    if (typeof email !== "string" || !EMAIL_RE.test(email.trim())) {
-      return res.status(400).json({ error: "a valid `email` is required" });
+    const vetted = vetEmail(email);
+    if (!vetted.ok || !vetted.email) {
+      return res.status(400).json({ error: vetted.error ?? "invalid email" });
     }
     // Recorded, not enforced — but a run with no stated basis is one nobody can
     // answer for later, and this is the cheapest possible place to capture it.
@@ -177,7 +205,7 @@ export function raceRouter(): Router {
       }
     }
 
-    const address = email.trim();
+    const address = vetted.email;
     const subjectId = await resolveSubjectId(address);
     const runId = newRunId();
 
@@ -379,8 +407,8 @@ export function raceRouter(): Router {
       raw: run.raw as Record<string, any>,
     });
 
-    await putTargets(subjectId, plan);
-    res.json(plan);
+    const storedIn = await putTargets(subjectId, plan);
+    res.json({ ...plan, storedIn });
   }));
 
   r.get("/subjects/:subjectId/targets", json(async (req, res) => {
@@ -390,7 +418,28 @@ export function raceRouter(): Router {
   }));
 
   r.get("/subjects", json(async (_req, res) => {
-    res.json(await subjectIndex());
+    res.json({ ...(await subjectIndex()), subjects: await subjectSummaries() });
+  }));
+
+  /**
+   * Everything stored for one subject, in one call: the latest completed run
+   * and the step 2 plan if there is one. This is the free path — loading a
+   * subject costs nothing, so testing and demoing never has to re-bill.
+   */
+  r.get("/subjects/:subjectId/bundle", json(async (req, res) => {
+    const subjectId = String(req.params.subjectId).trim();
+    const index = (await listRuns(500)) as any[];
+    const row = index.find((r) => r.subjectId === subjectId && r.status === "completed");
+    if (!row) return res.status(404).json({ error: `no completed run for ${subjectId}` });
+
+    const map = await subjectIndex();
+    const email = Object.entries(map.byEmail).find(([, id]) => id === subjectId)?.[0];
+
+    res.json({
+      subjectId, email,
+      run: withViews(await getRun(row.runId)),
+      plan: await fetchTargets(subjectId),
+    });
   }));
 
   return r;
