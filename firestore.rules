@@ -128,7 +128,12 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // 8. Test connection probe (/test/{testId})
+    // 8. RACE Personas (/race_personas/{docId})
+    match /race_personas/{docId} {
+      allow read, write: if true;
+    }
+
+    // 9. Test connection probe (/test/{testId})
     match /test/{testId} {
       allow read, write: if true;
     }

@@ -258,6 +258,30 @@
         }
       },
       "required": ["subjectId"]
+    },
+    "RacePersona": {
+      "title": "RACE Persona Record",
+      "description": "Synthesized profile, persona attributes, and scoring for a resolved subject",
+      "type": "object",
+      "properties": {
+        "docId": {
+          "type": "string",
+          "description": "Unique persona document identifier or subject ID"
+        },
+        "subjectId": {
+          "type": "string",
+          "description": "Target subject identifier"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the persona generation"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when persona was created or updated"
+        }
+      },
+      "required": ["subjectId"]
     }
   },
   "firestore": {
@@ -288,6 +312,10 @@
     "/race_scrapes/{docId}": {
       "schema": "RaceScrape",
       "description": "Collection of executed scrape records and target results"
+    },
+    "/race_personas/{docId}": {
+      "schema": "RacePersona",
+      "description": "Collection of generated persona records and behavioral profiles"
     }
   }
 }
