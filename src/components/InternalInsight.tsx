@@ -1,0 +1,295 @@
+import React, { useState } from 'react';
+import { 
+  ArrowLeft, 
+  Users, 
+  Target, 
+  ShieldCheck, 
+  ChevronRight, 
+  Briefcase, 
+  Tag, 
+  Mail, 
+  Shield, 
+  Sparkles,
+  Info
+} from 'lucide-react';
+
+export type CapabilityType = 'Customer Insight' | 'Lead Gen' | 'Lead Qualification';
+export type SectorType = 'Automobile' | 'Luxury Watch' | 'Real Estate';
+
+export const SECTOR_TICKET_PRICES: Record<SectorType, string[]> = {
+  'Automobile': ['₹10–20L', '₹20–50L', '₹50L+'],
+  'Luxury Watch': ['₹25k–50k', '₹50k–1L', '₹1L+'],
+  'Real Estate': ['₹1–5Cr', '₹5–10Cr', '₹10Cr+']
+};
+
+interface CapabilityMeta {
+  title: CapabilityType;
+  description: string;
+  actionVerb: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  requiresContact: boolean;
+}
+
+const CAPABILITIES: CapabilityMeta[] = [
+  {
+    title: 'Customer Insight',
+    description: 'Scores and segments existing customer portfolios against behavioral propensities and psychographic models.',
+    actionVerb: 'Run Customer Insight Scoring Pass',
+    icon: Users,
+    requiresContact: true
+  },
+  {
+    title: 'Lead Gen',
+    description: "Identifies and delivers pre-profiled, high-propensity prospects matched to target segment parameters from Thriwe's verified intelligence pool.",
+    actionVerb: 'Generate Leads',
+    icon: Target,
+    requiresContact: false
+  },
+  {
+    title: 'Lead Qualification',
+    description: 'Screens and ranks incoming pipeline rosters against propensity benchmarks and risk qualification criteria before engagement.',
+    actionVerb: 'Run Lead Qualification',
+    icon: ShieldCheck,
+    requiresContact: true
+  }
+];
+
+export const InternalInsight: React.FC = () => {
+  const [selectedCapability, setSelectedCapability] = useState<CapabilityType | null>(null);
+  const [sector, setSector] = useState<SectorType>('Automobile');
+  const [ticketPrice, setTicketPrice] = useState<string>(SECTOR_TICKET_PRICES['Automobile'][0]);
+  const [contactEmail, setContactEmail] = useState<string>('');
+
+  const handleSectorChange = (newSector: SectorType) => {
+    setSector(newSector);
+    // Automatically swap the ticket price list and set to the first valid option of the new sector
+    const newOptions = SECTOR_TICKET_PRICES[newSector];
+    setTicketPrice(newOptions[0]);
+  };
+
+  const handleSelectCapability = (cap: CapabilityType) => {
+    setSelectedCapability(cap);
+    setContactEmail('');
+  };
+
+  const currentCapabilityMeta = CAPABILITIES.find(c => c.title === selectedCapability);
+
+  return (
+    <div className="space-y-6 pb-16 font-sans select-none" id="super-admin-internal-insight">
+      
+      {/* Top Breadcrumb & Title Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-200/80 pb-5">
+        <div>
+          <div className="flex items-center gap-2 text-[10px] font-mono tracking-widest uppercase text-neutral-400 font-semibold mb-1">
+            <span className="flex items-center gap-1 text-[#2563eb]">
+              <Shield size={12} />
+              <span>Super Admin</span>
+            </span>
+            <span>/</span>
+            <span>Internal Insight</span>
+          </div>
+          <h2 className="text-2xl font-bold tracking-tight text-neutral-900">
+            Internal Insight
+          </h2>
+          <p className="text-xs text-neutral-500 font-medium mt-1">
+            Walk prospects through Thriwe's live intelligence capabilities using real domain parameters.
+          </p>
+        </div>
+
+        {selectedCapability && (
+          <button
+            type="button"
+            onClick={() => setSelectedCapability(null)}
+            className="self-start sm:self-center inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-neutral-600 hover:text-neutral-900 bg-white hover:bg-neutral-50 border border-neutral-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+            id="internal-insight-back-btn"
+          >
+            <ArrowLeft size={13} />
+            <span>Back to Capabilities</span>
+          </button>
+        )}
+      </div>
+
+      {/* Screen 1: Landing — Capability Cards */}
+      {!selectedCapability ? (
+        <div className="space-y-6" id="internal-insight-screen-1">
+          <div className="bg-white border border-neutral-200 rounded-xl p-5 shadow-2xs">
+            <div className="flex items-center gap-2 text-xs font-bold text-neutral-800 mb-1">
+              <Sparkles size={14} className="text-[#2563eb]" />
+              <span>Select Capability to Configure</span>
+            </div>
+            <p className="text-xs text-neutral-500 font-medium leading-relaxed max-w-2xl">
+              Choose one of the three core intelligence modules below to open its dedicated parameter configuration form.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {CAPABILITIES.map((cap) => {
+              const Icon = cap.icon;
+              return (
+                <div
+                  key={cap.title}
+                  onClick={() => handleSelectCapability(cap.title)}
+                  className="bg-white hover:bg-neutral-50/70 border border-neutral-200 hover:border-[#2563eb]/50 rounded-xl p-6 shadow-2xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between group text-left"
+                  id={`capability-card-${cap.title.toLowerCase().replace(/\s+/g, '-')}`}
+                >
+                  <div className="space-y-3.5">
+                    <div className="w-10 h-10 rounded-lg bg-neutral-100 group-hover:bg-blue-50 border border-neutral-200 group-hover:border-blue-200 flex items-center justify-center transition-colors">
+                      <Icon size={20} className="text-neutral-700 group-hover:text-[#2563eb] transition-colors" />
+                    </div>
+
+                    <div className="space-y-2">
+                      <h3 className="text-base font-bold text-neutral-900 group-hover:text-[#2563eb] transition-colors">
+                        {cap.title}
+                      </h3>
+                      <p className="text-xs text-neutral-600 font-normal leading-relaxed">
+                        {cap.description}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-6 mt-4 border-t border-neutral-100 flex items-center justify-between text-xs font-bold text-neutral-500 group-hover:text-[#2563eb] transition-colors">
+                    <span>Configure parameters</span>
+                    <ChevronRight size={14} className="transform group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        /* Screen 2: Configuration Form (Per Capability) */
+        <div className="max-w-2xl space-y-6" id="internal-insight-screen-2">
+          
+          {/* Capability Label — Read-only Header */}
+          <div className="bg-neutral-900 text-white rounded-xl p-5 shadow-xs flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold block">
+                Selected Capability (Read-Only)
+              </span>
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                {currentCapabilityMeta && (
+                  <currentCapabilityMeta.icon size={18} className="text-[#60a5fa]" />
+                )}
+                <span>{selectedCapability}</span>
+              </h3>
+            </div>
+            <span className="text-[11px] font-mono font-bold px-2.5 py-1 bg-white/10 rounded-md border border-white/10 text-neutral-200">
+              Module Config
+            </span>
+          </div>
+
+          {/* Configuration Form Card */}
+          <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-2xs space-y-5">
+            
+            {/* Sector Dropdown */}
+            <div className="space-y-1.5">
+              <label 
+                htmlFor="sector-dropdown" 
+                className="block text-xs font-bold text-neutral-700 flex items-center gap-1.5"
+              >
+                <Briefcase size={13} className="text-neutral-500" />
+                <span>Sector</span>
+              </label>
+              <select
+                id="sector-dropdown"
+                value={sector}
+                onChange={(e) => handleSectorChange(e.target.value as SectorType)}
+                className="w-full px-3.5 py-2.5 text-xs font-medium text-neutral-800 bg-white border border-neutral-300 rounded-lg shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-[#2563eb]/20 focus:border-[#2563eb] transition-all cursor-pointer"
+              >
+                <option value="Automobile">Automobile</option>
+                <option value="Luxury Watch">Luxury Watch</option>
+                <option value="Real Estate">Real Estate</option>
+              </select>
+              <p className="text-[10.5px] text-neutral-400 font-medium">
+                Selecting a sector adjusts the applicable ticket price bracket options dynamically.
+              </p>
+            </div>
+
+            {/* Ticket Price Dropdown (Options Set strictly by Sector) */}
+            <div className="space-y-1.5">
+              <label 
+                htmlFor="ticket-price-dropdown" 
+                className="block text-xs font-bold text-neutral-700 flex items-center gap-1.5"
+              >
+                <Tag size={13} className="text-neutral-500" />
+                <span>Ticket Price</span>
+              </label>
+              <select
+                id="ticket-price-dropdown"
+                value={ticketPrice}
+                onChange={(e) => setTicketPrice(e.target.value)}
+                className="w-full px-3.5 py-2.5 text-xs font-medium text-neutral-800 bg-white border border-neutral-300 rounded-lg shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-[#2563eb]/20 focus:border-[#2563eb] transition-all cursor-pointer"
+              >
+                {SECTOR_TICKET_PRICES[sector].map((priceOption) => (
+                  <option key={priceOption} value={priceOption}>
+                    {priceOption}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10.5px] text-neutral-400 font-medium">
+                Sector-specific valuation tiers configured for {sector}.
+              </p>
+            </div>
+
+            {/* Contact (Email) Input:
+                Present ONLY for Customer Insight and Lead Qualification.
+                NOT PRESENT AT ALL for Lead Gen (not hidden, not disabled, literally not rendered).
+            */}
+            {selectedCapability !== 'Lead Gen' && (
+              <div className="space-y-1.5" id="contact-email-field-group">
+                <label 
+                  htmlFor="contact-email-input" 
+                  className="block text-xs font-bold text-neutral-700 flex items-center gap-1.5"
+                >
+                  <Mail size={13} className="text-neutral-500" />
+                  <span>Contact (email)</span>
+                </label>
+                <input
+                  type="email"
+                  id="contact-email-input"
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                  placeholder="e.g. prospect@enterprise.com"
+                  className="w-full px-3.5 py-2.5 text-xs font-medium text-neutral-800 bg-white border border-neutral-300 rounded-lg shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-[#2563eb]/20 focus:border-[#2563eb] transition-all placeholder:text-neutral-400"
+                />
+                <p className="text-[10.5px] text-neutral-400 font-medium">
+                  {selectedCapability} processes specific subject profiles from input rosters.
+                </p>
+              </div>
+            )}
+
+            {/* CTA Button — Labeled with the real product's own action verb for this capability */}
+            <div className="pt-3 border-t border-neutral-100 space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  // Currently non-functional placeholder for this pass
+                }}
+                className="w-full py-3 px-4 bg-[#1e40af] hover:bg-[#1d4ed8] text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-99"
+                id="internal-insight-cta-btn"
+              >
+                <span>{currentCapabilityMeta?.actionVerb || 'Execute'}</span>
+              </button>
+              <div className="flex items-center justify-between text-[10.5px] text-neutral-400 font-medium px-1">
+                <span className="flex items-center gap-1 text-neutral-500">
+                  <Info size={12} />
+                  <span>Action is parked for current scoping round.</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCapability(null)}
+                  className="text-neutral-500 hover:text-neutral-800 font-bold hover:underline cursor-pointer"
+                >
+                  Change Capability
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+    </div>
+  );
+};

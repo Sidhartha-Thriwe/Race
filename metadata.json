@@ -1,0 +1,6 @@
+{
+  "name": "RACE by Thriwe",
+  "description": "Find them. Understand them. Keep them. India's most precise customer intelligence ecosystem.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
