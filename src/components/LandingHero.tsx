@@ -75,11 +75,12 @@ export default function LandingHero({ onOpenContact, onGetStarted }: LandingHero
         className="relative max-w-[1360px] mx-auto mt-16"
       >
         <div className="rounded-[26px] border border-neutral-200/60 bg-gradient-to-b from-[#f7f9fe] to-[#eef3fd] p-3 shadow-2xl">
-          <div className="relative rounded-[18px] overflow-hidden bg-white shadow-inner aspect-[16/9] flex items-center justify-center">
+          <div className="relative rounded-[18px] overflow-hidden bg-white shadow-inner aspect-[16/9] sm:aspect-[1678/815] flex items-center justify-start">
             <img 
               src="/hero-dashboard.png" 
               alt="RACE Customer Intelligence Dashboard" 
-              className="w-full h-full object-cover object-top"
+              className="w-full h-full object-cover object-left-top"
+              style={{ objectPosition: 'left top' }}
               referrerPolicy="no-referrer"
             />
           </div>
