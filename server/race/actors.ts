@@ -101,11 +101,27 @@ export const ACTORS: ActorSpec[] = [
   {
     actor: "abotapi/duolingo-learner-scraper",
     platform: "duolingo", label: "Duolingo", status: "unverified",
-    needs: "username",
+    needs: "username or profile URL",
     note: "returns hasPlus beside streak — a dormant paid affinity rendered directly",
     buildInput: (ids) => {
+      // Input shape read from the actor's own schema, not from the store
+      // listing. The listing truncates inputFields, and filling the gap from
+      // memory produced `mode: "profiles"` — which is a value of searchType,
+      // not of mode, and cost a 400 on the first live run. A truncated schema
+      // is worse than none, because it looks complete.
+      //
+      // mode enum: search | url | courses | vocabulary
+      const url = pick(ids, "profileUrl");
+      if (url && /duolingo\.com\/profile\//i.test(url)) {
+        // Prefer the URL the vendor gave us over a username we would have to
+        // parse back out of it.
+        return { mode: "url", urls: [url], fetchAchievements: true, maxItems: 20 };
+      }
       const u = pick(ids, "username");
-      return u ? { mode: "profiles", usernames: [u], fetchAchievements: true } : null;
+      return u
+        ? { mode: "search", searchType: "profiles", usernames: [u],
+            fetchAchievements: true, maxItems: 20 }
+        : null;
     },
   },
   {

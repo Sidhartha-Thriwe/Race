@@ -26,7 +26,7 @@ type PlanReady = {
 type Attempt = {
   platform: string; label: string; actor: string;
   planStatus: PlanReady['status'];
-  outcome: 'succeeded' | 'zero_item_suspect' | 'failed' | 'skipped';
+  outcome: 'succeeded' | 'zero_item_suspect' | 'thin_payload' | 'failed' | 'skipped';
   itemCount: number; costUSD?: number; durationMs?: number;
   narrative: string; error?: string;
 };
@@ -34,8 +34,8 @@ type Attempt = {
 export type Scrape = {
   subjectId: string; status: string;
   attempts: Attempt[];
-  report: { attempted: number; succeeded: number; zeroItem: number; failed: number;
-            skipped: number; totalItems: number; totalCostUSD: number };
+  report: { attempted: number; succeeded: number; zeroItem: number; thin: number;
+            failed: number; skipped: number; totalItems: number; totalCostUSD: number };
   steps: { t: string; level: 'info' | 'warn' | 'error'; msg: string }[];
   data: Record<string, unknown[]>;
   storedIn?: string;
@@ -44,6 +44,7 @@ export type Scrape = {
 const OUTCOME = {
   succeeded: { icon: CheckCircle2, cls: 'text-emerald-600', label: 'returned items' },
   zero_item_suspect: { icon: HelpCircle, cls: 'text-amber-600', label: 'zero items — suspect' },
+  thin_payload: { icon: HelpCircle, cls: 'text-amber-600', label: 'profile stub only' },
   failed: { icon: XCircle, cls: 'text-red-500', label: 'failed' },
   skipped: { icon: Info, cls: 'text-neutral-400', label: 'skipped' },
 } as const;

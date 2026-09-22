@@ -39,15 +39,36 @@ export interface TimelineRow {
 }
 export interface GeoRow { module: string; latitude: number; longitude: number; label?: string }
 
+/**
+ * A review the subject wrote. Lives under mod.data, not spec_format.
+ *
+ * This was missed entirely for the first build: flattenSpec only ever read
+ * spec_format, so mod.data was never opened. vendor-apis.md calls the maps
+ * module's review corpus "the single highest-value surface in the whole
+ * method", and it was sitting in the stored payload unread while an Apify
+ * actor was being paid to fetch the same thing.
+ */
+export interface ReviewRow {
+  module: string;
+  place?: string;
+  address?: string;
+  rating?: number;
+  date?: string;
+  body?: string;
+  tags?: string[];
+  types?: string[];
+}
+
 export interface ExtractedViews {
   registered: RegisteredRow[];
   rich: RichRow[];
   breached: BreachRow[];
   timeline: TimelineRow[];
   geo: GeoRow[];
+  reviews: ReviewRow[];
   counts: {
     modules: number; registered: number; rich: number;
-    breached: number; timelineEvents: number; geo: number;
+    breached: number; timelineEvents: number; geo: number; reviews: number;
   };
 }
 
@@ -150,12 +171,44 @@ function geoFor(moduleName: string, flat: Record<string, any>): GeoRow[] {
   return rows;
 }
 
+/** Reviews and Local Guide counters out of a module's raw `data` block. */
+function fromModuleData(moduleName: string, mod: any): {
+  reviews: ReviewRow[]; stats: Record<string, any>;
+} {
+  const data = mod?.data;
+  if (!data || typeof data !== "object") return { reviews: [], stats: {} };
+
+  const reviews: ReviewRow[] = [];
+  for (const r of data.reviews ?? []) {
+    if (!r || typeof r !== "object") continue;
+    reviews.push({
+      module: moduleName,
+      place: r.name ?? r.place ?? r.title,
+      address: r.address,
+      rating: typeof r.rating === "number" ? r.rating : undefined,
+      date: r.approximative_date ?? r.date ?? r.published_at,
+      body: r.review ?? r.text ?? r.comment ?? r.body,
+      tags: Array.isArray(r.tags) ? r.tags.map(String) : undefined,
+      types: Array.isArray(r.types) ? r.types.map(String) : undefined,
+    });
+  }
+
+  // The Local Guide counters — reviews, ratings, photos, answers and the rest.
+  // Scalars only; they belong beside the module's other fields.
+  const stats: Record<string, any> = {};
+  for (const [k, v] of Object.entries(data.stats ?? {})) {
+    if (v !== null && typeof v !== "object") stats[k] = v;
+  }
+  return { reviews, stats };
+}
+
 export function extractViews(raw: Record<string, any>): ExtractedViews {
   const registered: RegisteredRow[] = [];
   const rich: RichRow[] = [];
   const breached: BreachRow[] = [];
   const timeline: TimelineRow[] = [];
   const geo: GeoRow[] = [];
+  const reviews: ReviewRow[] = [];
 
   const modules: any[] = Array.isArray(raw?.osint_industries) ? raw.osint_industries : [];
 
@@ -177,6 +230,15 @@ export function extractViews(raw: Record<string, any>): ExtractedViews {
 
     for (const spec of specs) {
       handleSpec(name, mod, spec);
+    }
+
+    // The raw data block, which the normalised layer does not repeat.
+    const extra = fromModuleData(name, mod);
+    reviews.push(...extra.reviews);
+    if (Object.keys(extra.stats).length) {
+      const row = rich.find((r) => r.module === name);
+      if (row) Object.assign(row.fields, extra.stats);
+      else rich.push({ module: name, fields: extra.stats, specialCategoryFields: [] });
     }
   }
 
@@ -256,7 +318,7 @@ export function extractViews(raw: Record<string, any>): ExtractedViews {
   timeline.sort((a, b) => (a.start < b.start ? 1 : -1)); // newest first
 
   return {
-    registered, rich, breached, timeline, geo,
+    registered, rich, breached, timeline, geo, reviews,
     counts: {
       modules: modules.length,
       registered: registered.length,
@@ -264,6 +326,7 @@ export function extractViews(raw: Record<string, any>): ExtractedViews {
       breached: breached.length,
       timelineEvents: timeline.length,
       geo: geo.length,
+      reviews: reviews.length,
     },
   };
 }
@@ -300,5 +363,8 @@ export function viewsToCsv(views: ExtractedViews): Record<string, string> {
     "timeline_events.csv": table(views.timeline as any,
       ["module", "group", "start", "content"]),
     "geo_data.csv": table(views.geo as any, ["module", "latitude", "longitude", "label"]),
+    "reviews_data.csv": table(
+      views.reviews.map((r) => ({ ...r, tags: r.tags?.join(" | "), types: r.types?.join(" | ") })) as any,
+      ["module", "place", "address", "rating", "date", "body", "tags", "types"]),
   };
 }

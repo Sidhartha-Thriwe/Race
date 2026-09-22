@@ -22,8 +22,10 @@ export type Views = {
               breachCount?: number; dataClasses: string[]; description?: string }[];
   timeline: { module: string; group: string; start: string; content: string }[];
   geo: { module: string; latitude: number; longitude: number; label?: string }[];
+  reviews: { module: string; place?: string; address?: string; rating?: number;
+             date?: string; body?: string }[];
   counts: { modules: number; registered: number; rich: number;
-            breached: number; timelineEvents: number; geo: number };
+            breached: number; timelineEvents: number; geo: number; reviews: number };
 };
 
 export type Run = {
@@ -211,6 +213,7 @@ const TABS: { key: keyof Views; label: string; countKey: keyof Views['counts'] }
   { key: 'rich', label: 'Detail', countKey: 'rich' },
   { key: 'registered', label: 'Registered', countKey: 'registered' },
   { key: 'breached', label: 'Breaches', countKey: 'breached' },
+  { key: 'reviews', label: 'Reviews', countKey: 'reviews' },
   { key: 'timeline', label: 'Timeline', countKey: 'timelineEvents' },
   { key: 'geo', label: 'Locations', countKey: 'geo' },
 ];
@@ -218,6 +221,7 @@ const TABS: { key: keyof Views; label: string; countKey: keyof Views['counts'] }
 const CSV_FOR: Record<string, string> = {
   rich: 'rich_data.csv', registered: 'checker_registered_data.csv',
   breached: 'breached_data.csv', timeline: 'timeline_events.csv', geo: 'geo_data.csv',
+  reviews: 'reviews_data.csv',
 };
 
 export const ViewTabs: React.FC<{ views: Views; runId: string }> = ({ views, runId }) => {
@@ -285,6 +289,18 @@ export const ViewTabs: React.FC<{ views: Views; runId: string }> = ({ views, run
             {b.dataClasses.length > 0 && (
               <div className="text-neutral-500 mt-0.5">Exposed: {b.dataClasses.join(', ')}</div>
             )}
+          </div>
+        ))}
+
+        {tab === 'reviews' && views.reviews.map((r, i) => (
+          <div key={i} className="mb-2 last:mb-0 pb-2 border-b border-neutral-100 last:border-0">
+            <div className="font-bold text-neutral-800">
+              {r.place ?? 'unnamed place'}
+              {r.rating != null && <span className="text-neutral-400 font-normal"> · {r.rating}★</span>}
+              {r.date && <span className="text-neutral-400 font-normal"> · {r.date}</span>}
+            </div>
+            {r.address && <div className="text-neutral-400">{r.address}</div>}
+            {r.body && <div className="text-neutral-600 mt-0.5">{r.body}</div>}
           </div>
         ))}
 

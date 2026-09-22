@@ -24,7 +24,7 @@ export interface ScrapeAttempt {
   actor: string;
   /** Carried through from the plan so a zero result can be read in context. */
   planStatus: "verified" | "unverified" | "unproven-contested";
-  outcome: "succeeded" | "zero_item_suspect" | "failed" | "skipped";
+  outcome: "succeeded" | "zero_item_suspect" | "thin_payload" | "failed" | "skipped";
   itemCount: number;
   costUSD?: number;
   durationMs?: number;
@@ -38,6 +38,7 @@ export interface ScrapeReport {
   attempted: number;
   succeeded: number;
   zeroItem: number;
+  thin: number;
   failed: number;
   skipped: number;
   totalItems: number;
@@ -87,43 +88,122 @@ function scrub(value: unknown): unknown {
   return value;
 }
 
+/**
+ * An item can be an error wearing a result's shape.
+ *
+ * Google Maps returned exactly one item on the first live run — and that item
+ * was {result_type: "error", error_message: "The data service could not return
+ * reviews…"}. itemCount was 1, so it was recorded as a success. That is the
+ * same failure this whole step exists to catch, reproduced in the code meant to
+ * catch it: I guarded against zero items and never considered that a non-zero
+ * item might be a failure report.
+ *
+ * Item counts and HTTP status are not evidence. The payload is.
+ */
+function errorMessage(item: any): string | null {
+  if (!item || typeof item !== "object") return null;
+  const flagged =
+    item.result_type === "error" || item.status === "error" ||
+    item.error_type != null || item.error_message != null ||
+    (typeof item.error === "string" && item.error.length > 0);
+  if (!flagged) return null;
+  return String(item.error_message ?? item.error ?? item.error_type ?? "error item");
+}
+
+/**
+ * How much of a single-item payload is actually populated.
+ *
+ * "Every field empty" was too blunt: GitHub came back with public_repos 0,
+ * followers 0, repos null — but also a bio and a blog URL, so an all-empty test
+ * never fired and a profile stub read as a clean success.
+ *
+ * Reporting the ratio is more honest than any threshold, because sparse and
+ * empty are genuinely different and only a human can weigh which matters here.
+ * The threshold exists only to decide whether to draw attention to it.
+ *
+ * Identity and metadata fields are excluded from the count: a login and a
+ * created_at are always present and say nothing about whether the scrape found
+ * anything.
+ */
+const IDENTITY_FIELD = new Set([
+  "login", "username", "handle", "id", "type", "url", "html_url", "avatar_url",
+  "scraped_at", "fetched_at", "created_at", "updated_at", "name",
+]);
+
+function density(items: any[]): { populated: number; total: number; ratio: number } | null {
+  if (items.length !== 1 || !items[0] || typeof items[0] !== "object") return null;
+  const entries = Object.entries(items[0]).filter(
+    ([k]) => !IDENTITY_FIELD.has(k.toLowerCase()));
+  if (!entries.length) return null;
+  const populated = entries.filter(([, v]) =>
+    !(v === null || v === undefined || v === 0 || v === "" || v === false ||
+      (Array.isArray(v) && v.length === 0))).length;
+  return { populated, total: entries.length, ratio: populated / entries.length };
+}
+
 const note = (steps: RunStep[], level: RunStep["level"], msg: string, detail?: unknown) =>
   steps.push({ t: new Date().toISOString(), level, msg, detail });
 
 /** Explain an outcome in terms of what the operator should do about it. */
 function narrate(a: {
   label: string; planStatus: ScrapeAttempt["planStatus"];
-  itemCount: number; ok: boolean; error?: string;
-}): { outcome: ScrapeAttempt["outcome"]; narrative: string } {
+  items: any[]; ok: boolean; error?: string;
+}): { outcome: ScrapeAttempt["outcome"]; narrative: string; usableCount: number } {
   if (!a.ok) {
-    return { outcome: "failed", narrative: `${a.label} actor did not complete: ${a.error}` };
+    return { outcome: "failed", usableCount: 0,
+             narrative: `${a.label} actor did not complete: ${a.error}` };
   }
-  if (a.itemCount > 0) {
-    return { outcome: "succeeded", narrative: `${a.itemCount} item(s) returned.` };
-  }
-  // Zero items, valid input. The plan status is the only thing that shifts the
-  // reading, so it is what the sentence turns on.
-  if (a.planStatus === "unproven-contested") {
+
+  // Strip error-shaped items before counting anything.
+  const errors = a.items.map(errorMessage).filter(Boolean) as string[];
+  const usable = a.items.filter((i) => !errorMessage(i));
+
+  if (errors.length && !usable.length) {
     return {
-      outcome: "zero_item_suspect",
+      outcome: "failed", usableCount: 0,
+      narrative: `${a.label} returned ${errors.length} item(s), all of them error ` +
+                 `reports rather than data — the actor's own message was: ${errors[0]}`,
+    };
+  }
+
+  if (usable.length > 0) {
+    const partial = errors.length
+      ? ` (${errors.length} further item(s) were error reports: ${errors[0]})`
+      : "";
+    const d = density(usable);
+    const detail = d ? ` ${d.populated} of ${d.total} substantive field(s) populated.` : "";
+
+    if (d && d.ratio < 0.25) {
+      return {
+        outcome: "thin_payload", usableCount: usable.length,
+        narrative: `One item returned, but only${detail.replace(".", "")} — a profile ` +
+                   `stub rather than enrichment.` +
+                   (a.planStatus === "unproven-contested"
+                     ? ` This actor is flagged unproven-contested, which is the likely reason.`
+                     : ``) + partial,
+      };
+    }
+    return { outcome: "succeeded", usableCount: usable.length,
+             narrative: `${usable.length} item(s) returned.${detail}${partial}` };
+  }
+
+  // Zero usable items, valid input. The plan status is the only thing that
+  // shifts the reading, so it is what the sentence turns on.
+  if (a.planStatus === "unproven-contested") {
+    return { outcome: "zero_item_suspect", usableCount: 0,
       narrative: `No items. This actor is flagged unproven-contested — our own ` +
                  `scraping notes say it should not work, so treat this as the ` +
-                 `actor failing rather than an empty account.`,
-    };
+                 `actor failing rather than an empty account.` };
   }
   if (a.planStatus === "unverified") {
-    return {
-      outcome: "zero_item_suspect",
+    return { outcome: "zero_item_suspect", usableCount: 0,
       narrative: `No items. This actor has never been proven against a real ` +
                  `target, so an empty account and a broken actor look identical ` +
-                 `here. Verify the actor before reading this as absence.`,
-    };
+                 `here. Verify the actor before reading this as absence.` };
   }
-  return {
-    outcome: "zero_item_suspect",
+  return { outcome: "zero_item_suspect", usableCount: 0,
     narrative: `No items from a verified actor — most likely a genuinely empty ` +
-               `account, but still worth one manual check.`,
-  };
+               `account, but still worth one manual check.` };
 }
 
 export async function runScrape(opts: {
@@ -162,14 +242,14 @@ export async function runScrape(opts: {
         maxItems: MAX_ITEMS,
       });
 
-      const { outcome, narrative } = narrate({
+      const { outcome, narrative, usableCount } = narrate({
         label: item.label, planStatus: item.status,
-        itemCount: res.itemCount, ok: res.ok, error: res.error,
+        items: res.items as any[], ok: res.ok, error: res.error,
       });
 
       attempts.push({
         platform: item.platform, label: item.label, actor: item.actor,
-        planStatus: item.status, outcome, itemCount: res.itemCount,
+        planStatus: item.status, outcome, itemCount: usableCount,
         costUSD: res.costUSD, durationMs: res.durationMs, runId: res.runId,
         narrative, error: res.error,
       });
@@ -191,6 +271,7 @@ export async function runScrape(opts: {
     attempted: attempts.length,
     succeeded: attempts.filter((a) => a.outcome === "succeeded").length,
     zeroItem: attempts.filter((a) => a.outcome === "zero_item_suspect").length,
+    thin: attempts.filter((a) => a.outcome === "thin_payload").length,
     failed: attempts.filter((a) => a.outcome === "failed").length,
     skipped: (opts.plan?.ready?.length ?? 0) - ready.length,
     totalItems: attempts.reduce((n, a) => n + a.itemCount, 0),
