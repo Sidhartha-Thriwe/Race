@@ -23,7 +23,7 @@ import { loadWorkspaceId } from "./db.js";
 const MODEL = process.env.RACE_CATEGORIES_MODEL
   ?? process.env.RACE_PERSONA_MODEL
   ?? "claude-sonnet-5";
-const MAX_TOKENS = Number(process.env.RACE_CATEGORIES_MAX_TOKENS ?? 16000);
+const MAX_TOKENS = Number(process.env.RACE_CATEGORIES_MAX_TOKENS ?? 32000);
 
 export const CONFIDENCE = ["High", "Medium", "Low"] as const;
 
@@ -222,16 +222,34 @@ export async function deriveCategories(opts: {
   const text = (resp.content ?? [])
     .filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
 
+  const stopReason = resp.stop_reason ?? "unknown";
+  note("info", `Model returned ${text.length} chars · stop_reason ${stopReason}`, {
+    outputTokens: resp.usage?.output_tokens, maxTokens: MAX_TOKENS,
+  });
+
   const parsed = parseJson(text);
   if (!parsed?.topCategories && !parsed?.scoringTable) {
-    note("error", "Model did not return a usable category object", {
-      head: text.slice(0, 300),
-    });
-    return {
-      subjectId: opts.subjectId, model: MODEL, createdAt: new Date().toISOString(),
-      scoringTable: [], topCategories: [], deprioritized: [],
-      audit: empty, usage: resp.usage, steps,
-    };
+    /*
+     * An empty result is NOT a completed run.
+     *
+     * The first live step 5 run rendered "0 ranked · 0 deprioritised · 0
+     * candidates scored" as a finished card, which is the same failure shape
+     * this pipeline has produced four times already: a 200 with an empty body,
+     * twelve breaches read as one, an error object counted as a result, a
+     * profile stub read as enrichment. The payload is the evidence, never the
+     * count or the status.
+     *
+     * So throw. The route marks the record failed and the panel shows why,
+     * instead of presenting an empty table as an answer.
+     */
+    const why = stopReason === "max_tokens"
+      ? `the model hit the ${MAX_TOKENS}-token output ceiling and its JSON was cut off mid-object. ` +
+        "Raise RACE_CATEGORIES_MAX_TOKENS."
+      : `stop_reason was "${stopReason}" and the text could not be parsed as JSON.`;
+    note("error", `No usable category object: ${why}`, { head: text.slice(0, 400) });
+    const e = new Error(`Category derivation returned nothing usable — ${why}`);
+    (e as any).head = text.slice(0, 400);
+    throw e;
   }
 
   // Offer fields first, then identity. Order matters only in that stripping a

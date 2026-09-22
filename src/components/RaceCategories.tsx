@@ -198,6 +198,17 @@ export const RaceCategories: React.FC<{
           )}
 
           <div className="max-h-[30rem] overflow-auto text-[10.5px]">
+            {/* A stored record with nothing in it is a failed run, not an answer. */}
+            {data.audit?.candidates === 0 && data.topCategories.length === 0 && (
+              <div className="px-3 py-3 text-neutral-500 leading-snug">
+                <span className="font-bold text-neutral-700">Nothing came back. </span>
+                The call completed but returned no usable category object, so there is
+                nothing to read here. This is a failed run rendered as an empty one —
+                check the record's <code className="text-[9.5px]">steps</code> in the
+                JSON for the stop reason, and re-run.
+              </div>
+            )}
+
             {data.scoringNote && (
               <div className="px-3 py-2 border-b border-neutral-100 text-neutral-600 leading-snug">
                 {data.scoringNote}
