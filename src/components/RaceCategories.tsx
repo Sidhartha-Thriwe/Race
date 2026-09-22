@@ -29,8 +29,7 @@ type ScoringRow = {
 
 type TopCategory = {
   rank: number; category: string; evidenceStrength: number; psychFit: number;
-  rationale: string; frameworkArgument?: string; monetisableHeadroom?: string;
-  limitation?: string;
+  rationale: string;
 };
 
 export type Categories = {
@@ -40,10 +39,7 @@ export type Categories = {
   scoringNote?: string;
   scoringTable: ScoringRow[];
   topCategories: TopCategory[];
-  dormantPaidAffinity?: string;
-  openWindow?: string;
   deprioritized: string[];
-  evidenceNote?: string;
   audit: {
     candidates: number; ranked: number; deprioritised: number;
     byRejectionRule: Record<string, number>; dormantFound: boolean;
@@ -251,22 +247,12 @@ export const RaceCategories: React.FC<{
 
                   {isOpen && (
                     <div className="px-3 pb-3 pl-10 space-y-1.5 text-neutral-600 leading-snug">
-                      <Field label="Why this person" text={c.rationale} />
-                      <Field label="Why it clears the bar" text={c.frameworkArgument} />
-                      <Field label="Monetisable headroom" text={c.monetisableHeadroom} />
-                      <Field label="Limitation" text={c.limitation} />
+                      {c.rationale}
                     </div>
                   )}
                 </div>
               );
             })}
-
-            {(data.dormantPaidAffinity || data.openWindow) && (
-              <div className="px-3 py-2 border-b border-neutral-100 space-y-1.5">
-                <Field label="Dormant paid affinity" text={data.dormantPaidAffinity} />
-                <Field label="Open purchase window" text={data.openWindow} />
-              </div>
-            )}
 
             {/* Deprioritised — retained, marked, and behind a toggle. */}
             {(rejectedRows.length > 0 || data.deprioritized.length > 0) && (
@@ -325,12 +311,6 @@ export const RaceCategories: React.FC<{
               </div>
             )}
 
-            {data.evidenceNote && (
-              <div className="px-3 py-2 text-neutral-500 leading-snug">
-                <span className="font-bold text-neutral-600">What the evidence could not reach — </span>
-                {data.evidenceNote}
-              </div>
-            )}
           </div>
 
           <div className="flex items-start gap-1.5 px-3 py-2 bg-neutral-50 border-t border-neutral-100">
@@ -350,14 +330,6 @@ export const RaceCategories: React.FC<{
     </div>
   );
 };
-
-const Field: React.FC<{ label: string; text?: string }> = ({ label, text }) =>
-  text ? (
-    <div>
-      <span className="font-bold text-neutral-500">{label} — </span>
-      <span>{text}</span>
-    </div>
-  ) : null;
 
 const Score: React.FC<{ label: string; value: number }> = ({ label, value }) => (
   <span className="flex items-center gap-1">

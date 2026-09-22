@@ -54,9 +54,6 @@ export interface TopCategory {
   evidenceStrength: number;
   psychFit: number;
   rationale: string;
-  frameworkArgument?: string;
-  monetisableHeadroom?: string;
-  limitation?: string;
 }
 
 export interface CategoriesResult {
@@ -67,10 +64,7 @@ export interface CategoriesResult {
   scoringNote?: string;
   scoringTable: ScoringRow[];
   topCategories: TopCategory[];
-  dormantPaidAffinity?: string;
-  openWindow?: string;
   deprioritized: string[];
-  evidenceNote?: string;
   audit: {
     candidates: number;
     ranked: number;
@@ -306,12 +300,17 @@ export async function deriveCategories(opts: {
   }
 
   const thin = topCategories.filter((c) => isThin(c.rationale)).length;
-  const dormantText = String(clean.dormantPaidAffinity ?? "");
-  const dormantFound = Boolean(dormantText) && !/^none\b|no dormant|not found|none found/i.test(dormantText.trim());
+  /*
+   * A heuristic, and labelled as one. The contract has no dormant-affinity field
+   * — the skill treats dormancy as a ranking INPUT that step 4 surfaces, not a
+   * step 5 output — so the only way to tell whether the ranking engaged with it
+   * is to look for the vocabulary in the reasoning.
+   */
+  const dormantFound = /\bdormant\b|\blapsed\b/i.test(JSON.stringify(clean));
 
   note("info",
        `${scoringTable.length} candidates · ${topCategories.length} ranked · ` +
-       `${deprioritised} deprioritised · dormant paid affinity ${dormantFound ? "found" : "not found"}`);
+       `${deprioritised} deprioritised · dormancy ${dormantFound ? "engaged with" : "not mentioned"}`);
 
   if (topCategories.length && !deprioritised) {
     // Straight from the framework: score every candidate including the ones you
@@ -330,10 +329,7 @@ export async function deriveCategories(opts: {
     scoringNote: clean.scoringNote,
     scoringTable,
     topCategories,
-    dormantPaidAffinity: clean.dormantPaidAffinity,
-    openWindow: clean.openWindow,
     deprioritized,
-    evidenceNote: clean.evidenceNote,
     audit: {
       candidates: scoringTable.length,
       ranked: topCategories.length,

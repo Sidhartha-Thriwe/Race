@@ -215,23 +215,24 @@ out_of_scope, and saying so is the correct output.
 
 # Output
 
-Return ONLY this JSON object:
+Return ONLY this JSON object. Four keys, and no others — this shape is fixed and
+has produced the rankings the method's feedback was collected on.
 
 {
-  "scoringNote": "a paragraph naming the two or three things that shape THIS ranking — the organising fact of the footprint, the spend register the evidence actually supports, and the honest limitation. Not a summary of the persona.",
+  "scoringNote": "one paragraph. Name the two or three things that shape THIS ranking — the organising fact of the footprint, the spend register the evidence actually supports, and the honest limitation. Around 600-700 characters. Not a summary of the persona.",
 
   "scoringTable": [
     {
       "category": "the label used in the ranking",
-      "revealed": "what they did, for how long, at what cost — with specifics",
-      "psychFit": "which need, motivator or hygiene, one line",
-      "timing": "open window and perishability, or 'None' / 'Continuous'",
-      "motivator": "the specific pull, two or three words",
+      "revealed": "what they did, for how long, at what cost. ONE CLAUSE, around 60 characters. Specifics, not prose: '3 continents in reviews, US account region, Emirates registered'",
+      "psychFit": "one clause, around 35 characters: 'Serves the organising fact directly'",
+      "timing": "a few words: 'Continuous', 'None', '6 months ago; roughly annual'",
+      "motivator": "two or three words: 'Moving well', 'Finishing something started'",
       "confidence": "High|Medium|Low",
       "outcome": "ranked|deprioritised",
       "rejected": true,
       "rejectionRule": "ubiquitous_not_identity|no_monetisable_headroom|hygiene_only|stale|out_of_scope",
-      "dispositionNote": "one or two sentences: why it lost, in evidence terms"
+      "dispositionNote": "one or two sentences, around 150 characters, on rejected rows where the reason needs more than the rule name"
     }
   ],
 
@@ -241,26 +242,23 @@ Return ONLY this JSON object:
       "category": "the category label",
       "evidenceStrength": 9,
       "psychFit": 10,
-      "rationale": "why this person, in evidence terms — the specific detail that makes this more than a generic reading",
-      "frameworkArgument": "which lens carries it: which McClelland need, why motivator rather than hygiene, what window is open",
-      "monetisableHeadroom": "if this person acted on this, how much would plausibly go through a card, and on what basis you say so",
-      "limitation": "the honest weakness in this row — thin base, inferred cadence, single instance"
+      "rationale": "around 350 characters. This single field carries the whole argument: why this person in evidence terms, the specific detail that makes it more than a generic reading, which lens carries it, and the honest weakness. Do not split it across fields."
     }
   ],
 
-  "dormantPaidAffinity": "what the subject has already paid for and stopped using, with the evidence — or 'None found in the evidence available' if there is none. Never invent one.",
-
-  "openWindow": "any live purchase-cycle window and roughly how long it stays open, or 'None observed'. Perishable, so date it.",
-
   "deprioritized": [
-    "one entry per rejected category: the label, then the argument against it, in evidence terms. Long enough to be disagreed with."
-  ],
-
-  "evidenceNote": "one or two sentences on what the evidence could NOT reach, and what that means for this ranking's reliability"
+    "one entry per rejected category, around 250 characters: the label, then the argument against it in evidence terms. This is where the monetisable-headroom and hygiene-only judgements get said out loud."
+  ]
 }
 
-Include a "rejected" and "rejectionRule" key only on rows whose outcome is
-"deprioritised". Every ranked row must also appear in scoringTable.`;
+The four scoring dimensions are terse table cells, not paragraphs. The argument
+lives in "rationale" for what ranked and in "deprioritized" for what did not.
+Writing the same reasoning in several fields makes the ranking longer without
+making it better, and it is how this output stops being readable.
+
+Include "rejected" and "rejectionRule" only on rows whose outcome is
+"deprioritised". Every ranked row must also appear in scoringTable. Do not add
+any key not listed above.`;
 
 /**
  * Everything the model needs, and nothing it does not.
