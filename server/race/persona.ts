@@ -58,8 +58,33 @@ export function personaConfigured(): { ok: boolean; reason?: string } {
 
 const EMAIL = /[\w.+-]+@[\w-]+\.[\w.]{2,}/g;
 const URL = /https?:\/\/\S+/g;
-const LONG_ID = /\b\d{12,}\b/g;              // contributor ids, numeric user ids
-const PHONE = /\+?\d[\d\s-]{8,}\d/g;
+const LONG_ID = /\b\d{12,}\b/g;   // contributor ids, numeric platform user ids
+
+/**
+ * Dates must survive. This is the pipeline's oldest and worst bug.
+ *
+ * The first version of this guard used /\+?\d[\d\s-]{8,}\d/ for phone numbers,
+ * which matches "2022-04-13" exactly — the leading 2, eight characters of
+ * digits and hyphens, a trailing digit. Every account-creation date, last-seen
+ * date and breach date in the first two personas came back as "[redacted]",
+ * with 16 and 18 "identity" removals that were almost entirely dates.
+ *
+ * osint-framework.md names this precise failure: "it matched ISO dates as phone
+ * numbers and deleted every account-creation and pro-tier-expiry date, which is
+ * precisely the evidence the strongest finding rests on. Tidying data is how you
+ * lose it." Reproduced here despite being quoted in the prompt this file sends.
+ *
+ * So: recognise dates first and leave them alone, and require a phone candidate
+ * to carry at least ten actual digits — an ISO date has eight.
+ */
+const ISO_DATE = /\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z?)?/;
+const PHONE_CANDIDATE = /\+?\d[\d\s().-]{7,}\d/g;
+
+function looksLikePhone(candidate: string): boolean {
+  if (ISO_DATE.test(candidate)) return false;
+  const digits = candidate.replace(/\D/g, "");
+  return digits.length >= 10 && digits.length <= 15;
+}
 
 /**
  * Strip identity from the model's output.
@@ -76,7 +101,7 @@ function scrubIdentity(text: string): { text: string; hits: number } {
     .replace(EMAIL, count)
     .replace(URL, count)
     .replace(LONG_ID, count)
-    .replace(PHONE, count);
+    .replace(PHONE_CANDIDATE, (m) => (looksLikePhone(m) ? count(m) : m));
   return { text: out, hits };
 }
 
