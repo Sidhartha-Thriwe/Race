@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useRaceRun, RaceRunPanel, StorageBadge, RunSpinner } from './RaceLiveRun';
+import { RaceTargets } from './RaceTargets';
 import { 
   ArrowLeft, 
   Users, 
@@ -292,6 +293,11 @@ export const InternalInsight: React.FC = () => {
               </button>
 
               {isLive && <RaceRunPanel run={run} error={error} email={contactEmail} storage={storage} />}
+
+              {/* Step 2 — plan only. Enabled once step 1 has a subject id. */}
+              {isLive && run?.subjectId && (
+                <RaceTargets subjectId={run.subjectId} enabled={run.status === 'completed'} />
+              )}
 
               <div className="flex items-center justify-between text-[10.5px] text-neutral-400 font-medium px-1">
                 <span className="flex items-center gap-1 text-neutral-500">

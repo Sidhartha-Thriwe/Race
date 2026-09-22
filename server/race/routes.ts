@@ -21,7 +21,8 @@ import {
   saveRun, listRuns, getRun, dataDir, type RunRecord,
 } from "./store.js";
 import { normaliseWithSkill, skillConfigured } from "./claude.js";
-import { storeInfo } from "./db.js";
+import { storeInfo, putTargets, fetchTargets } from "./db.js";
+import { planTargets } from "./targets.js";
 import { fetchStage } from "./pipeline.js";
 import { summarise } from "./summary.js";
 import { extractViews, viewsToCsv } from "./extract.js";
@@ -308,6 +309,51 @@ export function raceRouter(): Router {
       subjects: await subjectIndex(),
       runs,
     });
+  });
+
+  // ------------------------------------------------------------- step 2
+  // Plan only. Reads what step 1 stored, decides what COULD be scraped, and
+  // writes it down. No Apify call, no vendor call, nothing spent — so it is
+  // safe to re-run, and the plan can be argued with before it costs anything.
+  r.post("/subjects/:subjectId/targets", async (req, res) => {
+    const subjectId = String(req.params.subjectId).trim();
+    if (!/^P-\d{2,}$/.test(subjectId)) {
+      return res.status(400).json({ error: "subjectId must look like P-20" });
+    }
+
+    // The most recent completed run for this subject is the source. A failed
+    // run has no payload worth planning against.
+    const index = (await listRuns(500)) as any[];
+    const row = index.find((r) => r.subjectId === subjectId && r.status === "completed");
+    if (!row) {
+      return res.status(409).json({
+        error: `no completed step 1 run for ${subjectId} — run step 1 first`,
+      });
+    }
+
+    const run = await getRun(row.runId);
+    if (!run?.raw) {
+      return res.status(409).json({
+        error: "that run has no stored payload, so there is nothing to plan against",
+      });
+    }
+
+    const plan = planTargets({
+      subjectId,
+      emailHash: run.emailHash,
+      email: run.email,
+      sourceRunId: run.runId,
+      raw: run.raw as Record<string, any>,
+    });
+
+    await putTargets(subjectId, plan);
+    res.json(plan);
+  });
+
+  r.get("/subjects/:subjectId/targets", async (req, res) => {
+    const plan = await fetchTargets(String(req.params.subjectId).trim());
+    if (!plan) return res.status(404).json({ error: "no plan yet — run step 2" });
+    res.json(plan);
   });
 
   r.get("/subjects", async (_req, res) => {

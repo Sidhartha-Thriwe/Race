@@ -13,3 +13,5 @@ coverage/
 _git_leftovers/
 .vitecheck/
 COMMIT_RACE_BACKEND.txt
+
+.vitecheck2/

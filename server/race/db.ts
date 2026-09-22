@@ -49,6 +49,7 @@ let initError: string | null = null;
 let initialised = false;
 
 const RUNS_COLLECTION = "race_runs";
+const TARGETS_COLLECTION = "race_targets";
 
 function appletConfig(): {
   projectId?: string;
@@ -131,6 +132,7 @@ export function storeInfo(): { backend: Backend; error: string | null } {
 
 function ensureDirs() {
   fs.mkdirSync(RUNS_DIR, { recursive: true });
+  fs.mkdirSync(path.join(DATA_DIR, "targets"), { recursive: true });
 }
 
 async function writeAtomic(file: string, data: string) {
@@ -230,6 +232,25 @@ export async function queryRuns(limitCount: number): Promise<any[]> {
   } catch {
     return [];
   }
+}
+
+/** Step 2 plans, keyed by subject id — one current plan per subject. */
+export async function putTargets(subjectId: string, plan: any): Promise<void> {
+  if (backend === "firestore" && firestore) {
+    await setDoc(doc(firestore, TARGETS_COLLECTION, subjectId),
+                 JSON.parse(JSON.stringify(plan)));
+    return;
+  }
+  await writeAtomic(path.join(DATA_DIR, "targets", `${subjectId}.json`),
+                    JSON.stringify(plan, null, 2));
+}
+
+export async function fetchTargets(subjectId: string): Promise<any | null> {
+  if (backend === "firestore" && firestore) {
+    const snap = await getDoc(doc(firestore, TARGETS_COLLECTION, subjectId));
+    return snap.exists() ? snap.data() : null;
+  }
+  return readJsonFile(path.join(DATA_DIR, "targets", `${subjectId}.json`), null);
 }
 
 export function dataDir(): string {
