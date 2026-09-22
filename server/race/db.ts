@@ -21,6 +21,19 @@
 import fs from "fs";
 import fsp from "fs/promises";
 import path from "path";
+import { initializeApp, getApps, getApp } from "firebase/app";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  query,
+  orderBy,
+  limit,
+  getDocs,
+  Firestore,
+} from "firebase/firestore";
 
 const DATA_DIR = process.env.RACE_DATA_DIR
   ? path.resolve(process.env.RACE_DATA_DIR)
@@ -30,50 +43,35 @@ const RUNS_DIR = path.join(DATA_DIR, "runs");
 
 export type Backend = "firestore" | "filesystem";
 
-let firestore: any = null;
+let firestore: Firestore | null = null;
 let backend: Backend = "filesystem";
 let initError: string | null = null;
 let initialised = false;
 
-const SUBJECTS_DOC = "race_meta/subjects";
 const RUNS_COLLECTION = "race_runs";
 
-function appletConfig(): { projectId?: string; firestoreDatabaseId?: string } {
+function appletConfig(): {
+  projectId?: string;
+  firestoreDatabaseId?: string;
+  apiKey?: string;
+  authDomain?: string;
+  storageBucket?: string;
+  messagingSenderId?: string;
+  appId?: string;
+} {
   // Written by AI Studio's Firebase integration. Read rather than hardcoded so
   // a reprovision does not silently point us at the old database.
-  for (const p of ["firebase-applet-config.json",
-                   path.join(process.cwd(), "firebase-applet-config.json")]) {
+  for (const p of [
+    "firebase-applet-config.json",
+    path.join(process.cwd(), "firebase-applet-config.json"),
+  ]) {
     try {
       return JSON.parse(fs.readFileSync(p, "utf8"));
-    } catch { /* try the next */ }
+    } catch {
+      /* try the next */
+    }
   }
   return {};
-}
-
-/**
- * The Firestore/gRPC stack surfaces credential failures as unhandled rejections
- * on background ticks, from retry timers we never hold a handle to. Node's
- * default for an unhandled rejection is to kill the process — so on any machine
- * without Application Default Credentials, the server dies at boot instead of
- * falling back to disk. Verified by watching exactly that happen.
- *
- * The guard stays installed for the process lifetime, because the late
- * rejections keep arriving after init has long since given up. It is
- * deliberately narrow: only auth- and Firestore-shaped reasons are swallowed,
- * and everything else is re-thrown so real bugs still crash loudly.
- */
-let guardInstalled = false;
-function installAuthRejectionGuard() {
-  if (guardInstalled) return;
-  guardInstalled = true;
-  process.on("unhandledRejection", (reason: any) => {
-    const msg = String(reason?.message ?? reason);
-    if (/credential|ADC|authenticat|metadata server|UNAUTHENTICATED|PERMISSION_DENIED|GoogleAuth|grpc/i.test(msg)) {
-      console.warn(`[race] ignored late Firestore auth rejection: ${msg.split("\n")[0]}`);
-      return;
-    }
-    throw reason;
-  });
 }
 
 export async function initStore(): Promise<{ backend: Backend; error: string | null }> {
@@ -85,37 +83,31 @@ export async function initStore(): Promise<{ backend: Backend; error: string | n
     return { backend, error: initError };
   }
 
-  installAuthRejectionGuard();
-
   try {
     const cfg = appletConfig();
     const projectId = process.env.GOOGLE_CLOUD_PROJECT ?? cfg.projectId;
     const databaseId = process.env.RACE_FIRESTORE_DB ?? cfg.firestoreDatabaseId;
     if (!projectId) throw new Error("no projectId (firebase-applet-config.json missing?)");
 
-    const { Firestore } = await import("@google-cloud/firestore");
-    const client = new Firestore({
-      projectId,
-      ...(databaseId && databaseId !== "(default)" ? { databaseId } : {}),
-    });
+    // Initialize Firebase app for server instance
+    const app = getApps().find((a) => a.name === "raceServer") ?? initializeApp(cfg, "raceServer");
+    const client = getFirestore(app, databaseId);
 
-    // A real round trip. Constructing the client never fails, so without this
-    // the first failure would be the first run of the demo. Bounded, because an
-    // unreachable metadata server hangs rather than erroring, and a server that
-    // never finishes booting is worse than one on the fallback store.
-    // Attach a catch to the probe itself and keep that handled promise, so a
-    // rejection arriving AFTER the timeout still counts as handled. Racing
-    // alone is not enough: the loser of the race keeps running, and its
-    // rejection lands on a later tick with nobody listening.
-    const probe = client.collection(RUNS_COLLECTION).limit(1).get()
+    // Verify round-trip connection to the database
+    const probe = getDocs(query(collection(client, RUNS_COLLECTION), limit(1)))
       .then(() => ({ ok: true as const }))
       .catch((err: any) => ({ ok: false as const, err }));
 
     const outcome: any = await Promise.race([
       probe,
       new Promise((resolve) =>
-        setTimeout(() => resolve({ ok: false, err: new Error("Firestore probe timed out after 8s") }), 8000)),
+        setTimeout(
+          () => resolve({ ok: false, err: new Error("Firestore probe timed out after 8s") }),
+          8000
+        )
+      ),
     ]);
+
     if (!outcome.ok) throw outcome.err;
 
     firestore = client;
@@ -161,52 +153,53 @@ async function readJsonFile<T>(file: string, fallback: T): Promise<T> {
 export type SubjectMap = { byEmail: Record<string, string>; nextOrdinal: number };
 
 export async function loadSubjects(seed: SubjectMap): Promise<SubjectMap> {
-  if (backend === "firestore") {
-    const snap = await firestore.doc(SUBJECTS_DOC).get();
-    return snap.exists ? (snap.data() as SubjectMap) : seed;
+  if (backend === "firestore" && firestore) {
+    const snap = await getDoc(doc(firestore, "race_meta", "subjects"));
+    return snap.exists() ? (snap.data() as SubjectMap) : seed;
   }
   return readJsonFile(path.join(DATA_DIR, "subjects.json"), seed);
 }
 
 export async function saveSubjects(map: SubjectMap): Promise<void> {
-  if (backend === "firestore") {
-    await firestore.doc(SUBJECTS_DOC).set(map);
+  if (backend === "firestore" && firestore) {
+    await setDoc(doc(firestore, "race_meta", "subjects"), map);
     return;
   }
   await writeAtomic(path.join(DATA_DIR, "subjects.json"), JSON.stringify(map, null, 2));
 }
 
 export async function loadLedger<T>(seed: T): Promise<T> {
-  if (backend === "firestore") {
-    const snap = await firestore.doc("race_meta/ledger").get();
-    return snap.exists ? (snap.data() as T) : seed;
+  if (backend === "firestore" && firestore) {
+    const snap = await getDoc(doc(firestore, "race_meta", "ledger"));
+    return snap.exists() ? (snap.data() as T) : seed;
   }
   return readJsonFile(path.join(DATA_DIR, "ledger.json"), seed);
 }
 
 export async function saveLedger(ledger: unknown): Promise<void> {
-  if (backend === "firestore") {
-    await firestore.doc("race_meta/ledger").set(ledger as any);
+  if (backend === "firestore" && firestore) {
+    await setDoc(doc(firestore, "race_meta", "ledger"), ledger as any);
     return;
   }
   await writeAtomic(path.join(DATA_DIR, "ledger.json"), JSON.stringify(ledger, null, 2));
 }
 
 export async function putRun(runId: string, record: any): Promise<void> {
-  if (backend === "firestore") {
-    // Firestore rejects undefined; strip it rather than letting one absent
-    // optional field fail the whole write.
-    await firestore.collection(RUNS_COLLECTION).doc(runId)
-      .set(JSON.parse(JSON.stringify(record)));
+  if (backend === "firestore" && firestore) {
+    // Firestore rejects undefined; strip it cleanly
+    await setDoc(
+      doc(firestore, RUNS_COLLECTION, runId),
+      JSON.parse(JSON.stringify(record))
+    );
     return;
   }
   await writeAtomic(path.join(RUNS_DIR, `${runId}.json`), JSON.stringify(record, null, 2));
 }
 
 export async function fetchRun(runId: string): Promise<any | null> {
-  if (backend === "firestore") {
-    const snap = await firestore.collection(RUNS_COLLECTION).doc(runId).get();
-    return snap.exists ? snap.data() : null;
+  if (backend === "firestore" && firestore) {
+    const snap = await getDoc(doc(firestore, RUNS_COLLECTION, runId));
+    return snap.exists() ? snap.data() : null;
   }
   return readJsonFile(path.join(RUNS_DIR, `${runId}.json`), null);
 }
@@ -218,16 +211,20 @@ export async function appendIndex(entry: any): Promise<void> {
   await fsp.appendFile(path.join(DATA_DIR, "runs.jsonl"), JSON.stringify(entry) + "\n", "utf8");
 }
 
-export async function queryRuns(limit: number): Promise<any[]> {
-  if (backend === "firestore") {
-    const snap = await firestore.collection(RUNS_COLLECTION)
-      .orderBy("startedAt", "desc").limit(limit).get();
-    return snap.docs.map((d: any) => d.data());
+export async function queryRuns(limitCount: number): Promise<any[]> {
+  if (backend === "firestore" && firestore) {
+    const q = query(
+      collection(firestore, RUNS_COLLECTION),
+      orderBy("startedAt", "desc"),
+      limit(limitCount)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => d.data());
   }
   try {
     const lines = (await fsp.readFile(path.join(DATA_DIR, "runs.jsonl"), "utf8"))
       .trim().split("\n").filter(Boolean);
-    return lines.slice(-limit).reverse().map((l) => {
+    return lines.slice(-limitCount).reverse().map((l) => {
       try { return JSON.parse(l); } catch { return { malformed: l }; }
     });
   } catch {
@@ -238,3 +235,4 @@ export async function queryRuns(limit: number): Promise<any[]> {
 export function dataDir(): string {
   return DATA_DIR;
 }
+

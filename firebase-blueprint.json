@@ -169,6 +169,43 @@
         }
       },
       "required": ["uid", "email", "role"]
+    },
+    "RaceRun": {
+      "title": "RACE Run Record",
+      "description": "Execution record for identity resolution engine",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string",
+          "description": "Unique run identifier",
+          "maxLength": 128
+        },
+        "subjectId": {
+          "type": "string",
+          "description": "Resolved subject identifier",
+          "maxLength": 128
+        },
+        "status": {
+          "type": "string",
+          "description": "Execution status of the run"
+        },
+        "startedAt": {
+          "type": "string",
+          "description": "Timestamp when run started"
+        }
+      },
+      "required": ["runId", "status"]
+    },
+    "RaceMeta": {
+      "title": "RACE Metadata",
+      "description": "Metadata for subject mapping and vendor spend ledger",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Metadata identifier"
+        }
+      }
     }
   },
   "firestore": {
@@ -183,6 +220,14 @@
     "/users/{userId}": {
       "schema": "UserProfile",
       "description": "Collection of user accounts with access roles"
+    },
+    "/race_runs/{runId}": {
+      "schema": "RaceRun",
+      "description": "Resolved identity run history records"
+    },
+    "/race_meta/{metaId}": {
+      "schema": "RaceMeta",
+      "description": "Metadata documents including subject mappings and spend ledger"
     }
   }
 }

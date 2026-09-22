@@ -107,5 +107,20 @@ service cloud.firestore {
                        (incoming().role == existing().role || isAdmin());
       allow delete: if isAdmin();
     }
+
+    // 4. RACE Runs (/race_runs/{runId})
+    match /race_runs/{runId} {
+      allow read, write: if true;
+    }
+
+    // 5. RACE Metadata (/race_meta/{metaId})
+    match /race_meta/{metaId} {
+      allow read, write: if true;
+    }
+
+    // 6. Test connection probe (/test/{testId})
+    match /test/{testId} {
+      allow read, write: if true;
+    }
   }
 }
