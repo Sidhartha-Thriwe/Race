@@ -163,7 +163,24 @@ export function extractViews(raw: Record<string, any>): ExtractedViews {
     const name = String(mod?.module ?? mod?.name ?? "").trim();
     if (!name) continue;
 
-    const spec = mod?.spec_format?.[0] ?? {};
+    // EVERY spec_format entry, not just the first.
+    //
+    // Reading only spec_format[0] is the mistake that made twelve breaches look
+    // like one. OSINT Industries returns all HIBP hits as a SINGLE module whose
+    // spec_format is an array with one entry per breach — MySpace, Canva,
+    // Zynga and the rest are indexes 0..11 of one module, not twelve modules.
+    // The same shape can appear for any module that has more than one record to
+    // report, so this is a general fix, not a breach-specific one.
+    const specs: any[] = Array.isArray(mod?.spec_format) && mod.spec_format.length
+      ? mod.spec_format
+      : [mod?.spec_format ?? {}];
+
+    for (const spec of specs) {
+      handleSpec(name, mod, spec);
+    }
+  }
+
+  function handleSpec(name: string, mod: any, spec: any) {
     const flat = flattenSpec(spec);
 
     // ---- breach records -------------------------------------------------
@@ -186,7 +203,7 @@ export function extractViews(raw: Record<string, any>): ExtractedViews {
         modifiedDate: str(flat.modified_date),
       });
       timeline.push(...timelineFor(name, flat, spec));
-      continue;
+      return;
     }
 
     // ---- everything else ------------------------------------------------
@@ -224,6 +241,17 @@ export function extractViews(raw: Record<string, any>): ExtractedViews {
     timeline.push(...timelineFor(name, flat, spec));
     geo.push(...geoFor(name, flat));
   }
+
+  // A module can emit several bare spec entries; it is still one account.
+  const seenRegistered = new Set<string>();
+  const dedupedRegistered = registered.filter((r) => {
+    const k = r.module.toLowerCase();
+    if (seenRegistered.has(k)) return false;
+    seenRegistered.add(k);
+    return true;
+  });
+  registered.length = 0;
+  registered.push(...dedupedRegistered);
 
   timeline.sort((a, b) => (a.start < b.start ? 1 : -1)); // newest first
 
