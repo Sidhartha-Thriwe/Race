@@ -55,11 +55,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const [isSuperAdminOpen, setIsSuperAdminOpen] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
+        setAuthError(null);
         // Sync user profile to Firestore
         try {
           const userDocRef = doc(db, 'users', user.uid);
@@ -86,9 +88,21 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const handleGoogleSignIn = async () => {
     try {
       setIsSigningIn(true);
+      setAuthError(null);
       await signInWithPopup(auth, googleProvider);
-    } catch (err) {
-      console.error('Google Sign In Error:', err);
+    } catch (err: unknown) {
+      const firebaseError = err as { code?: string; message?: string };
+      const errorCode = firebaseError?.code || '';
+      
+      // User closing the popup or cancelling is an expected user action
+      if (errorCode === 'auth/popup-closed-by-user' || errorCode === 'auth/cancelled-popup-request') {
+        console.info('Google Sign-In popup closed by user.');
+      } else if (errorCode === 'auth/popup-blocked') {
+        setAuthError('Sign-in popup was blocked by browser. Please enable popups.');
+      } else {
+        console.warn('Google Sign-In notification:', firebaseError?.message || 'Authentication not completed');
+        setAuthError('Sign-in could not be completed. Please try again.');
+      }
     } finally {
       setIsSigningIn(false);
     }
@@ -97,8 +111,9 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const handleGoogleSignOut = async () => {
     try {
       await signOut(auth);
-    } catch (err) {
-      console.error('Sign Out Error:', err);
+    } catch (err: unknown) {
+      const firebaseError = err as { message?: string };
+      console.warn('Sign Out:', firebaseError?.message || err);
     }
   };
   return (
@@ -500,6 +515,18 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               <LogIn size={14} />
               <span>{isSigningIn ? 'Signing in...' : 'Sign in with Google'}</span>
             </button>
+            {authError && (
+              <div className="text-[11px] text-amber-400 bg-amber-950/40 border border-amber-500/20 rounded-lg p-2 leading-tight flex items-start justify-between gap-1">
+                <span>{authError}</span>
+                <button 
+                  onClick={() => setAuthError(null)} 
+                  className="text-neutral-400 hover:text-white shrink-0 cursor-pointer p-0.5"
+                  aria-label="Dismiss error"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
             <div className="flex items-center justify-between px-1 text-[10px] text-neutral-500">
               <span>Firebase Cloud Auth</span>
               <button
