@@ -23,13 +23,22 @@
 
 export interface RegisteredRow {
   module: string; category?: string; categoryDescription?: string;
+  /** Which vendor reported it. Counted rather than inferred — see bySource. */
+  source?: string;
 }
 export interface RichRow {
   module: string;
   fields: Record<string, string | number | boolean>;
   specialCategoryFields: string[];
+  /**
+   * Which vendors contributed this row. Two vendors agreeing is stronger
+   * evidence than one, and a reader who cannot see which is which cannot tell
+   * corroboration from duplication.
+   */
+  sources?: string[];
 }
 export interface BreachRow {
+  source?: string;
   module: string; title?: string; website?: string; breachDate?: string;
   breachCount?: number; dataClasses: string[]; logo?: string; description?: string;
   addedDate?: string; modifiedDate?: string;
@@ -70,6 +79,10 @@ export interface ExtractedViews {
     modules: number; registered: number; rich: number;
     breached: number; timelineEvents: number; geo: number; reviews: number;
   };
+  /** Per-vendor contribution, so "35 platforms" can never hide which vendor found them. */
+  bySource?: Record<string, { rich: number; registered: number; breached: number }>;
+  /** Modules both vendors returned — corroboration, not duplication. */
+  corroborated?: string[];
 }
 
 /**
@@ -82,6 +95,8 @@ const SPECIAL_CATEGORY = new Set([
   "sexual_orientation", "relationship_status", "religion", "children",
   "location_of_birth", "marital_status", "health",
 ]);
+
+import { fromBehindTheEmail } from "./bte.js";
 
 const DROP_SPECIAL = () => process.env.RACE_DROP_SPECIAL_CATEGORY === "true";
 
@@ -295,6 +310,7 @@ export function extractViews(raw: Record<string, any>): ExtractedViews {
       // it says the address is in use there — just not rich capture.
       registered.push({
         module: name,
+        source: "osint_industries",
         category: str(category.name ?? mod?.category_name),
         categoryDescription: str(category.description ?? mod?.category_description),
       });
@@ -315,12 +331,80 @@ export function extractViews(raw: Record<string, any>): ExtractedViews {
   registered.length = 0;
   registered.push(...dedupedRegistered);
 
+  /* ------------------------------------------------- Behind the Email merge
+   *
+   * A second vendor, folded into the same rows rather than kept beside them,
+   * so nothing downstream has to learn that there are two.
+   *
+   * Dedupe matters more than it looks. Both vendors report Google, GitHub,
+   * Duolingo and the same breach corpus, and the naive merge inflates the
+   * platform count that step 4 reasons from — one account read as two, which
+   * is the twelve-breaches-read-as-one bug running in reverse. So a module
+   * both vendors returned keeps ONE row, gains the other's fields where they
+   * are new, and records both vendors in `sources`. That is corroboration,
+   * and it is worth more than either row alone.
+   */
+  const bte = fromBehindTheEmail(raw?.behind_the_email);
+  const key = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const corroborated: string[] = [];
+
+  for (const r of rich) r.sources = r.sources ?? ["osint_industries"];
+
+  for (const row of bte.rich) {
+    const existing = rich.find((r) => key(r.module) === key(row.module));
+    if (existing) {
+      corroborated.push(existing.module);
+      existing.sources = Array.from(new Set([...(existing.sources ?? []), "behind_the_email"]));
+      // The incumbent wins on conflict: OSINT's normalised layer is the one
+      // five subjects of guards were written against. BTE only fills gaps.
+      for (const [k, v] of Object.entries(row.fields)) {
+        if (!(k in existing.fields)) existing.fields[k] = v;
+      }
+    } else {
+      rich.push(row);
+    }
+  }
+
+  const richKeys = new Set(rich.map((r) => key(r.module)));
+  for (const row of bte.registered) {
+    if (richKeys.has(key(row.module))) continue;       // rich beats registered
+    if (registered.some((r) => key(r.module) === key(row.module))) continue;
+    registered.push(row);
+  }
+
+  // Breaches dedupe on the source name with its TLD stripped — OSINT says
+  // "Canva", BTE says "canva.com", and they are one incident.
+  const breachKey = (t?: string) => key(String(t ?? "").replace(/\.(com|in|net|org|io)$/i, ""));
+  for (const row of bte.breached) {
+    if (breached.some((b) => breachKey(b.title) === breachKey(row.title))) continue;
+    breached.push(row);
+  }
+
+  timeline.push(...bte.timeline);
+  reviews.push(...bte.reviews);
+
   timeline.sort((a, b) => (a.start < b.start ? 1 : -1)); // newest first
+
+  /*
+   * Count the tags. Do not subtract one total from another.
+   *
+   * The first version did `registered.length - bte.registered.length`, which
+   * reported -1 for OSINT on a BTE-only run, because dedupe drops some BTE rows
+   * before they reach the array. A negative count is at least obviously wrong;
+   * the same arithmetic would have quietly under-reported on a mixed run, which
+   * is the version that reaches a bank unnoticed.
+   */
+  for (const b of breached) b.source = b.source ?? "osint_industries";
+  const count = (v: string) => ({
+    rich: rich.filter((r) => (r.sources ?? []).includes(v)).length,
+    registered: registered.filter((r) => (r.source ?? "osint_industries") === v).length,
+    breached: breached.filter((b) => (b.source ?? "osint_industries") === v).length,
+  });
 
   return {
     registered, rich, breached, timeline, geo, reviews,
     counts: {
-      modules: modules.length,
+      modules: modules.length + bte.providers.length,
       registered: registered.length,
       rich: rich.length,
       breached: breached.length,
@@ -328,6 +412,15 @@ export function extractViews(raw: Record<string, any>): ExtractedViews {
       geo: geo.length,
       reviews: reviews.length,
     },
+    ...(bte.providers.length
+      ? {
+          bySource: {
+            osint_industries: count("osint_industries"),
+            behind_the_email: count("behind_the_email"),
+          },
+          corroborated: Array.from(new Set(corroborated)),
+        }
+      : {}),
   };
 }
 

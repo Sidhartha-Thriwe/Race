@@ -79,7 +79,13 @@ export function summarise(raw: Record<string, any>): DisplaySummary {
     for (const [provider, value] of Object.entries<any>(bte)) {
       if (provider === "dataBreach") {
         for (const r of value?.results ?? []) {
-          if (r?.source) breachSources.add(String(r.source));
+          // `source` is an OBJECT here — {name, date} — not a string. String()
+          // on it produced the literal "[object Object]", which the screen then
+          // displayed as a breach source. A value that means nothing rendered
+          // as though it means something is this project's recurring bug in
+          // miniature, so read the name and ignore the rest.
+          const name = typeof r?.source === "string" ? r.source : r?.source?.name;
+          if (name) breachSources.add(String(name));
         }
         continue;
       }
@@ -95,6 +101,10 @@ export function summarise(raw: Record<string, any>): DisplaySummary {
         }
         continue;
       }
+      // `summary` is the vendor's cross-provider roll-up, not a platform the
+      // subject has an account on. Counting it inflated platformCount by one
+      // and put a row called "summary" in the accounts list.
+      if (provider === "summary") continue;
       accounts.push({
         platform: provider,
         vendor: "behind_the_email",

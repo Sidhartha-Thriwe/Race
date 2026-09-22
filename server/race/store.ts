@@ -149,11 +149,53 @@ const CREDENTIAL_FIELDS = new Set([
   "ipaddress", "ip_address", "ip", "salt", "token", "cookie",
 ]);
 
+/**
+ * Breach records carry more than credentials.
+ *
+ * Behind the Email's dataBreach.results[] returns `fullName`, `phoneNumber`
+ * and `username` alongside the password. The credential scrub above caught the
+ * password and let the other three through, and the first live payload reached
+ * Firestore with all of them in it.
+ *
+ * These cannot go in CREDENTIAL_FIELDS, because `username` is a legitimate and
+ * load-bearing field elsewhere — step 2 reads it off GitHub and Duolingo rows
+ * to build scrape targets, and blanket-dropping it would silently cost the
+ * pipeline its routes. So the drop is scoped to breach results specifically:
+ * the source name and the date survive, which is what the method uses, and the
+ * personal detail attached to a decade-old leak does not.
+ */
+const BREACH_PERSONAL_FIELDS = new Set([
+  "fullname", "full_name", "phonenumber", "phone_number", "phone",
+  "username", "name", "address", "dob", "dateofbirth",
+]);
+
+function scrubBreachResults(results: unknown): unknown {
+  if (!Array.isArray(results)) return results;
+  return results.map((r) => {
+    if (!r || typeof r !== "object") return r;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(r as Record<string, unknown>)) {
+      if (k === "source") { out[k] = v; continue; }
+      if (BREACH_PERSONAL_FIELDS.has(k.toLowerCase().replace(/[^a-z_]/g, ""))) {
+        out[k] = "[redacted:breach-personal]";
+      } else {
+        out[k] = v;
+      }
+    }
+    return out;
+  });
+}
+
 export function scrubCredentials(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(scrubCredentials);
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (k === "dataBreach" && v && typeof v === "object") {
+        const b = v as Record<string, unknown>;
+        out[k] = scrubCredentials({ ...b, results: scrubBreachResults(b.results) });
+        continue;
+      }
       if (CREDENTIAL_FIELDS.has(k.toLowerCase().replace(/[^a-z_]/g, ""))) {
         out[k] = v == null || v === "" ? v : "[redacted:credential]";
       } else {
