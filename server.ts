@@ -1,15 +1,22 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
+import "dotenv/config";
+import { raceRouter } from "./server/race/routes.js";
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  app.use(express.json({ limit: "1mb" }));
+
   // Server-side API route
   app.get("/api/health", (req, res) => {
     res.json({ ok: true, ts: Date.now() });
   });
+
+  // RACE engine — skill 1 (identity resolution) and its run records.
+  app.use("/api/race", raceRouter());
 
   // Vite middleware for development vs static production serving
   if (process.env.NODE_ENV !== "production") {
