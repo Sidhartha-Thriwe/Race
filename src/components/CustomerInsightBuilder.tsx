@@ -18,7 +18,6 @@ import {
   Sparkles
 } from 'lucide-react';
 import { QualCampaign, QualFile } from './LeadQualification';
-import { RaceLiveRun } from './RaceLiveRun';
 
 interface CustomerInsightBuilderProps {
   selectedCampaign: QualCampaign | null;
@@ -791,9 +790,6 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                       I confirm this list was collected with consent covering behavioral and psychological profiling, not only contact use.
                     </label>
                   </div>
-
-                  {/* Live engine — one real subject, above the simulated bulk pass. */}
-                  <RaceLiveRun useCase="customer_insight" ticketBand={`₹${Math.round(ticketSizeMax / 100000)}L`} />
 
                   {/* RUN BUTTON */}
                   <div className="space-y-1.5">

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useRaceRun, RaceRunPanel, StorageBadge, RunSpinner } from './RaceLiveRun';
 import { 
   ArrowLeft, 
   Users, 
@@ -59,6 +60,12 @@ export const InternalInsight: React.FC = () => {
   const [sector, setSector] = useState<SectorType>('Automobile');
   const [ticketPrice, setTicketPrice] = useState<string>(SECTOR_TICKET_PRICES['Automobile'][0]);
   const [contactEmail, setContactEmail] = useState<string>('');
+
+  // The live engine. Customer Insight runs for real; the other two capabilities
+  // are still scoping placeholders, so the CTA keeps its old no-op there.
+  const { run, busy, error, storage, start } = useRaceRun();
+  const isLive = selectedCapability === 'Customer Insight';
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(contactEmail.trim());
 
   const handleSectorChange = (newSector: SectorType) => {
     setSector(newSector);
@@ -243,6 +250,7 @@ export const InternalInsight: React.FC = () => {
                 >
                   <Mail size={13} className="text-neutral-500" />
                   <span>Contact (email)</span>
+                  {isLive && <span className="ml-auto"><StorageBadge storage={storage} /></span>}
                 </label>
                 <input
                   type="email"
@@ -262,18 +270,34 @@ export const InternalInsight: React.FC = () => {
             <div className="pt-3 border-t border-neutral-100 space-y-2">
               <button
                 type="button"
+                disabled={isLive && (busy || !emailValid)}
                 onClick={() => {
-                  // Currently non-functional placeholder for this pass
+                  if (!isLive) return; // still a scoping placeholder for the other two
+                  start({ email: contactEmail, sector, ticketBand: ticketPrice,
+                          useCase: 'customer_insight' });
                 }}
-                className="w-full py-3 px-4 bg-[#1e40af] hover:bg-[#1d4ed8] text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-99"
+                className={`w-full py-3 px-4 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 active:scale-99 ${
+                  isLive && (busy || !emailValid)
+                    ? 'bg-neutral-100 text-neutral-400 border border-neutral-200 cursor-not-allowed'
+                    : 'bg-[#1e40af] hover:bg-[#1d4ed8] text-white cursor-pointer'
+                }`}
                 id="internal-insight-cta-btn"
               >
-                <span>{currentCapabilityMeta?.actionVerb || 'Execute'}</span>
+                {isLive && busy && <RunSpinner />}
+                <span>
+                  {isLive && busy
+                    ? 'Fetching and storing…'
+                    : currentCapabilityMeta?.actionVerb || 'Execute'}
+                </span>
               </button>
+
+              {isLive && <RaceRunPanel run={run} error={error} email={contactEmail} storage={storage} />}
+
               <div className="flex items-center justify-between text-[10.5px] text-neutral-400 font-medium px-1">
                 <span className="flex items-center gap-1 text-neutral-500">
-                  <Info size={12} />
-                  <span>Action is parked for current scoping round.</span>
+                  {isLive
+                    ? <><ShieldCheck size={12} /><span>Live — calls the vendor and stores the result.</span></>
+                    : <><Info size={12} /><span>Action is parked for current scoping round.</span></>}
                 </span>
                 <button
                   type="button"
