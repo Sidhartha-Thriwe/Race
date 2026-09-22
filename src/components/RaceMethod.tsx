@@ -36,7 +36,7 @@ export default function RaceMethod() {
             The RACE Method
           </h2>
           <p className="text-sm md:text-[16.5px] text-neutral-500 max-w-xl leading-[1.58]">
-            Most retention tools start from a blank slate and try to learn a client's customers from scratch. RACE starts somewhere else.
+            Most Customer Insight tools start from a blank slate and try to learn a client's customers from scratch. RACE starts somewhere else.
           </p>
         </div>
 

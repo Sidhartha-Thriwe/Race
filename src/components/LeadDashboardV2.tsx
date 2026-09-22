@@ -18,7 +18,8 @@ import {
   Download,
   Filter,
   DollarSign,
-  Briefcase
+  Briefcase,
+  Flame
 } from 'lucide-react';
 import { DashboardPeriod } from './AdminPanel';
 import { Campaign } from './CampaignBuilder';
@@ -104,6 +105,12 @@ export const LeadDashboardV2: React.FC<LeadDashboardV2Props> = ({
     const totalProspects = Math.round(baseProspects * periodMultiplier);
     const highConfVolume = Math.round(baseHighConfVolume * periodMultiplier);
 
+    // Budget & Daily Burn Rate for Card 4
+    const baseBudgetConsumed = 3035186;
+    const totalBudgetConsumed = Math.round(baseBudgetConsumed * periodMultiplier);
+    const daysInPeriod = selectedPeriod === 'This month' ? 30 : selectedPeriod === 'Year to date' ? 180 : 7;
+    const dailyBurnRate = Math.round(totalBudgetConsumed / daysInPeriod);
+
     // Minor period variance for CAC
     let actualCAC = baseActualCAC;
     let highConfCAC = baseHighConfCAC;
@@ -145,27 +152,27 @@ export const LeadDashboardV2: React.FC<LeadDashboardV2Props> = ({
       },
       guardrail2: {
         primaryLabel: 'Campaign Performance',
-        primarySub: 'Campaigns performing under target',
-        primaryVal: `${underTargetCampaigns} of ${totalCampaigns}`,
-        primaryUnit: 'under target CAC (66.7%)',
-        secondaryLabel: 'Campaign Fulfillment rate',
-        secondaryVal: `${fulfillmentRate}%`,
-        secondaryUnit: 'High Confidence delivery',
-        targetNote: 'Min fulfillment threshold: 90%',
-        isFavorable: true,
-        trend: '2 campaigns flagged for review'
-      },
-      leadingMetric: {
-        primaryLabel: '% High Confidence Leads',
-        primarySub: 'Proportion of high confidence lead',
-        primaryVal: `${highConfProportion.toFixed(1)}%`,
-        primaryUnit: 'of total delivered',
+        primarySub: 'Avg campaign score',
+        primaryVal: '4.25/5',
+        primaryUnit: 'Avg campaign score',
         secondaryLabel: 'Zero match rate',
         secondaryVal: `${zeroMatchRate.toFixed(1)}%`,
         secondaryUnit: 'unqualified dropped',
-        targetNote: 'Benchmark target: ≥ 50%',
-        isFavorable: highConfProportion >= 50,
-        trend: '+2.8% above quality SLA'
+        targetNote: 'Benchmark target: < 5%',
+        isFavorable: true,
+        trend: '2 campaigns flagged for review'
+      },
+      burnAndBudget: {
+        primaryLabel: 'Daily Burn Rate',
+        primarySub: 'Average daily spend',
+        primaryVal: formatCurrency(dailyBurnRate),
+        primaryUnit: '/ day',
+        secondaryLabel: 'Budget consumed till date',
+        secondaryVal: formatCurrency(totalBudgetConsumed),
+        secondaryUnit: 'total spend',
+        targetNote: 'Target pace',
+        isFavorable: true,
+        trend: 'Within planned pace'
       }
     };
   }, [selectedPeriod, periodMultiplier]);
@@ -573,7 +580,7 @@ export const LeadDashboardV2: React.FC<LeadDashboardV2Props> = ({
                 <span>{cardMetrics.northstar.trend}</span>
               </span>
               <span className="text-neutral-400 font-mono text-[10px]">
-                Cap: ₹1,500
+                Target: ₹1,500
               </span>
             </div>
           </div>
@@ -627,7 +634,7 @@ export const LeadDashboardV2: React.FC<LeadDashboardV2Props> = ({
           </div>
         </div>
 
-        {/* Card 3: Guardrail 2 card */}
+        {/* Card 3: Guardrail 2 card (Campaign Performance) */}
         <div 
           className="bg-white border border-neutral-200 rounded-xl p-5 shadow-2xs flex flex-col justify-between hover:border-neutral-300 transition-all group"
           id="v2-guardrail-2-card"
@@ -647,13 +654,13 @@ export const LeadDashboardV2: React.FC<LeadDashboardV2Props> = ({
                   {cardMetrics.guardrail2.primaryVal}
                 </span>
                 <span className="text-xs text-neutral-500 font-semibold">
-                  under target
+                  Avg campaign score
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Secondary Metric (Fulfillment rate) */}
+          {/* Secondary Metric (Zero Match Rate) */}
           <div className="mt-4 pt-3 border-t border-neutral-100">
             <div className="flex items-center justify-between text-xs">
               <span className="text-neutral-500 font-medium text-[11px]">
@@ -668,56 +675,53 @@ export const LeadDashboardV2: React.FC<LeadDashboardV2Props> = ({
                 <AlertTriangle size={12} />
                 <span>{cardMetrics.guardrail2.trend}</span>
               </span>
-              <span className="text-neutral-400 font-mono text-[10px]">
-                SLA: 90%
-              </span>
             </div>
           </div>
         </div>
 
-        {/* Card 4: Leading Metric card */}
+        {/* Card 4: Daily Burn Rate & Budget Consumed */}
         <div 
           className="bg-white border border-neutral-200 rounded-xl p-5 shadow-2xs flex flex-col justify-between hover:border-neutral-300 transition-all group"
-          id="v2-leading-metric-card"
+          id="v2-burn-budget-card"
         >
           <div>
             <div className="flex items-center justify-between gap-2 mb-2">
               <h3 className="text-xs font-bold text-neutral-800">
-                {cardMetrics.leadingMetric.primaryLabel}
+                {cardMetrics.burnAndBudget.primaryLabel}
               </h3>
-              <BarChart3 size={15} className="text-emerald-700" />
+              <Flame size={15} className="text-amber-600" />
             </div>
 
             {/* Primary Metric (Headline Figure) */}
             <div className="mt-3">
               <div className="flex items-baseline gap-1.5">
                 <span className="text-2xl font-black tracking-tight text-neutral-900">
-                  {cardMetrics.leadingMetric.primaryVal}
+                  {cardMetrics.burnAndBudget.primaryVal}
                 </span>
                 <span className="text-xs text-neutral-500 font-semibold">
-                  high confidence
+                  / day
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Secondary Metric (Zero match rate) */}
+          {/* Secondary Metric (Budget consumed till date) */}
           <div className="mt-4 pt-3 border-t border-neutral-100">
             <div className="flex items-center justify-between text-xs">
               <span className="text-neutral-500 font-medium text-[11px]">
-                {cardMetrics.leadingMetric.secondaryLabel}
+                {cardMetrics.burnAndBudget.secondaryLabel}
               </span>
               <span className="font-bold text-neutral-900 text-xs">
-                {cardMetrics.leadingMetric.secondaryVal}
+                {cardMetrics.burnAndBudget.secondaryVal}
               </span>
             </div>
             <div className="mt-1.5 flex items-center justify-between text-[10.5px]">
               <span className="text-emerald-700 font-semibold flex items-center gap-1">
                 <CheckCircle2 size={12} />
-                <span>{cardMetrics.leadingMetric.trend}</span>
+                <span>{cardMetrics.burnAndBudget.trend}</span>
               </span>
               <span className="text-neutral-400 font-mono text-[10px]">
-                Zero match: &lt; 5%
+                Target pace
               </span>
             </div>
           </div>
