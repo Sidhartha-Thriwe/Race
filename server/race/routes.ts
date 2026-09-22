@@ -22,8 +22,10 @@ import {
 } from "./store.js";
 import { normaliseWithSkill, skillConfigured } from "./claude.js";
 import { storeInfo, putTargets, fetchTargets, putScrape, fetchScrape,
-         putPersona, fetchPersona, loadWorkspaceId, saveWorkspaceId } from "./db.js";
+         putPersona, fetchPersona, putCategories, fetchCategories,
+         loadWorkspaceId, saveWorkspaceId } from "./db.js";
 import { buildPersona, personaConfigured } from "./persona.js";
+import { deriveCategories, categoriesConfigured } from "./categories.js";
 import { runScrape } from "./scrape.js";
 import { apifyConfigured } from "./apify.js";
 import { planTargets } from "./targets.js";
@@ -171,6 +173,8 @@ export function raceRouter(): Router {
       })),
       apify: { configured: apifyConfigured() },
       persona: { ...personaConfigured(), model: process.env.RACE_PERSONA_MODEL ?? "claude-sonnet-5" },
+      categories: { ...categoriesConfigured(),
+                    model: process.env.RACE_CATEGORIES_MODEL ?? process.env.RACE_PERSONA_MODEL ?? "claude-sonnet-5" },
       osintCredits: await osintCredits(),
       ledger: await ledgerSnapshot(),
       storage: storeInfo(),
@@ -522,6 +526,85 @@ export function raceRouter(): Router {
     }
   }));
 
+  // ------------------------------------------------------------- step 5
+  // Derive and rank categories. Frozen scoring, and it stops at the category:
+  // "high-end fitness" is a category, a named event is an offer, and offer
+  // construction is a separate step with its own gates.
+  r.post("/subjects/:subjectId/categories", json(async (req, res) => {
+    const subjectId = String(req.params.subjectId).trim();
+    if (!/^P-\d{2,}$/.test(subjectId)) {
+      return res.status(400).json({ error: "subjectId must look like P-20" });
+    }
+    const cfg = categoriesConfigured();
+    if (!cfg.ok) return res.status(503).json({ error: cfg.reason });
+
+    const persona = await fetchPersona(subjectId);
+    if (!persona || persona.status === "running" || persona.status === "failed"
+        || !(persona.attributeGroups ?? []).length) {
+      return res.status(409).json({ error: "no completed persona for this subject — run step 4" });
+    }
+
+    const index = (await listRuns(500)) as any[];
+    const row = index.find((r) => r.subjectId === subjectId && r.status === "completed");
+    if (!row) return res.status(409).json({ error: "no completed step 1 run for this subject" });
+
+    const run = withViews(await getRun(row.runId));
+    if (!run?.views) return res.status(409).json({ error: "that run has no views to reason from" });
+
+    const incomingWorkspace =
+      (req.headers["x-anthropic-workspace-id"] as string)?.trim() ||
+      (req.body?.workspaceId as string)?.trim();
+    if (incomingWorkspace) {
+      await saveWorkspaceId(incomingWorkspace);
+    }
+
+    // Answer now, work after — same reason as step 4. A long-running synchronous
+    // response gets cut by the proxy in front of Cloud Run while the work
+    // completes fine server-side, which reads as a failure and invites a
+    // re-run that pays for it twice.
+    const model = process.env.RACE_CATEGORIES_MODEL ?? process.env.RACE_PERSONA_MODEL ?? "claude-sonnet-5";
+    const startedAt = new Date().toISOString();
+    const emptyAudit = {
+      candidates: 0, ranked: 0, deprioritised: 0, byRejectionRule: {},
+      dormantFound: false, identityScrubbed: 0, offerFieldsRemoved: 0,
+      priceMentions: 0, thinJustifications: 0,
+    };
+    await putCategories(subjectId, {
+      subjectId, model, status: "running", startedAt,
+      scoringTable: [], topCategories: [], deprioritized: [], audit: emptyAudit,
+      steps: [{ t: startedAt, level: "info", msg: "Category derivation started" }],
+    });
+    res.status(202).json({ subjectId, status: "running", startedAt });
+
+    try {
+      const categories = await deriveCategories({
+        subjectId,
+        useCase: run.useCase, sector: run.sector, ticketBand: run.ticketBand,
+        views: run.views,
+        plan: await fetchTargets(subjectId),
+        scrape: await fetchScrape(subjectId),
+        persona,
+        workspaceId: incomingWorkspace,
+      });
+      await putCategories(subjectId, { ...categories, status: "completed", startedAt });
+    } catch (e: any) {
+      const message = `${e?.name ?? "Error"}: ${e?.message ?? String(e)}`;
+      console.error("[race] categories failed:", message);
+      await putCategories(subjectId, {
+        subjectId, model, status: "failed", startedAt,
+        finishedAt: new Date().toISOString(), error: message,
+        scoringTable: [], topCategories: [], deprioritized: [], audit: emptyAudit,
+        steps: [{ t: new Date().toISOString(), level: "error", msg: message }],
+      });
+    }
+  }));
+
+  r.get("/subjects/:subjectId/categories", json(async (req, res) => {
+    const categories = await fetchCategories(String(req.params.subjectId).trim());
+    if (!categories) return res.status(404).json({ error: "no categories yet — run step 5" });
+    res.json(categories);
+  }));
+
   r.post("/config/workspace", json(async (req, res) => {
     const workspaceId = String(req.body?.workspaceId ?? "").trim();
     if (!workspaceId) {
@@ -572,6 +655,7 @@ export function raceRouter(): Router {
       plan: await fetchTargets(subjectId),
       scrape: await fetchScrape(subjectId),
       persona: await fetchPersona(subjectId),
+      categories: await fetchCategories(subjectId),
     });
   }));
 

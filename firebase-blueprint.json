@@ -38,10 +38,20 @@
         "status": {
           "type": "string",
           "description": "Workflow review status",
-          "enum": ["new", "contacted", "archived"]
+          "enum": [
+            "new",
+            "contacted",
+            "archived"
+          ]
         }
       },
-      "required": ["name", "email", "company", "interest", "status"]
+      "required": [
+        "name",
+        "email",
+        "company",
+        "interest",
+        "status"
+      ]
     },
     "Campaign": {
       "title": "Campaign",
@@ -95,7 +105,12 @@
         "status": {
           "type": "string",
           "description": "Execution status of the campaign",
-          "enum": ["Active", "Paused", "Draft", "Completed"]
+          "enum": [
+            "Active",
+            "Paused",
+            "Draft",
+            "Completed"
+          ]
         },
         "createdAt": {
           "type": "string",
@@ -130,7 +145,15 @@
           "description": "Total prospects acquired"
         }
       },
-      "required": ["id", "name", "industry", "budgetPerDay", "totalBudgetCap", "status", "targetCAC"]
+      "required": [
+        "id",
+        "name",
+        "industry",
+        "budgetPerDay",
+        "totalBudgetCap",
+        "status",
+        "targetCAC"
+      ]
     },
     "UserProfile": {
       "title": "User Profile",
@@ -160,7 +183,11 @@
         "role": {
           "type": "string",
           "description": "Assigned access role in the system",
-          "enum": ["admin", "manager", "viewer"]
+          "enum": [
+            "admin",
+            "manager",
+            "viewer"
+          ]
         },
         "createdAt": {
           "type": "string",
@@ -168,7 +195,11 @@
           "description": "Account creation ISO timestamp"
         }
       },
-      "required": ["uid", "email", "role"]
+      "required": [
+        "uid",
+        "email",
+        "role"
+      ]
     },
     "RaceRun": {
       "title": "RACE Run Record",
@@ -194,7 +225,10 @@
           "description": "Timestamp when run started"
         }
       },
-      "required": ["runId", "status"]
+      "required": [
+        "runId",
+        "status"
+      ]
     },
     "RaceMeta": {
       "title": "RACE Metadata",
@@ -225,7 +259,10 @@
           "description": "Timestamp when targets were planned"
         }
       },
-      "required": ["subjectId", "sourceRunId"]
+      "required": [
+        "subjectId",
+        "sourceRunId"
+      ]
     },
     "RaceScrape": {
       "title": "RACE Scrape Record",
@@ -257,7 +294,9 @@
           "description": "Timestamp when scrape was executed"
         }
       },
-      "required": ["subjectId"]
+      "required": [
+        "subjectId"
+      ]
     },
     "RacePersona": {
       "title": "RACE Persona Record",
@@ -281,7 +320,39 @@
           "description": "Timestamp when persona was created or updated"
         }
       },
-      "required": ["subjectId"]
+      "required": [
+        "subjectId"
+      ]
+    },
+    "RaceCategory": {
+      "title": "RACE Category Ranking",
+      "description": "Ranked categories for a subject, with the full scoring table including deprioritised candidates. Stops at the category \u2014 no brands, offers or mechanisms.",
+      "type": "object",
+      "properties": {
+        "docId": {
+          "type": "string",
+          "description": "Subject ID used as the document identifier"
+        },
+        "subjectId": {
+          "type": "string",
+          "description": "Target subject identifier"
+        },
+        "status": {
+          "type": "string",
+          "description": "running, completed or failed"
+        },
+        "model": {
+          "type": "string",
+          "description": "Model used for the derivation"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the ranking was produced"
+        }
+      },
+      "required": [
+        "subjectId"
+      ]
     }
   },
   "firestore": {
@@ -316,6 +387,10 @@
     "/race_personas/{docId}": {
       "schema": "RacePersona",
       "description": "Collection of generated persona records and behavioral profiles"
+    },
+    "/race_categories/{docId}": {
+      "schema": "RaceCategory",
+      "description": "Collection of ranked category records, including rejected candidates and the reason each lost"
     }
   }
 }

@@ -3,6 +3,7 @@ import { useRaceRun, RaceRunPanel, StorageBadge, RunSpinner } from './RaceLiveRu
 import { RaceTargets } from './RaceTargets';
 import { RaceScrape } from './RaceScrape';
 import { RacePersona } from './RacePersona';
+import { RaceCategories } from './RaceCategories';
 import { 
   ArrowLeft, 
   Users, 
@@ -72,6 +73,9 @@ export const InternalInsight: React.FC = () => {
   const [loadedPlan, setLoadedPlan] = useState<any>(null);
   const [loadedScrape, setLoadedScrape] = useState<any>(null);
   const [loadedPersona, setLoadedPersona] = useState<any>(null);
+  const [loadedCategories, setLoadedCategories] = useState<any>(null);
+  /** The persona currently on screen, whether just built or loaded from storage. */
+  const [activePersona, setActivePersona] = useState<any>(null);
   /** The plan currently on screen, whether just run or loaded from storage. */
   const [activePlan, setActivePlan] = useState<any>(null);
   const isLive = selectedCapability === 'Customer Insight';
@@ -90,6 +94,8 @@ export const InternalInsight: React.FC = () => {
     setActivePlan(b.plan ?? null);
     setLoadedScrape(b.scrape ?? null);
     setLoadedPersona(b.persona ?? null);
+    setActivePersona(b.persona ?? null);
+    setLoadedCategories(b.categories ?? null);
     if (b.email) setContactEmail(b.email);
     const r = b.run ?? {};
     if (r.sector && ['Automobile', 'Luxury Watch', 'Real Estate'].includes(r.sector)) {
@@ -422,6 +428,14 @@ export const InternalInsight: React.FC = () => {
                     subjectId={run.subjectId}
                     enabled={Boolean(loadedScrape)}
                     initialPersona={loadedPersona}
+                    onPersona={setActivePersona}
+                  />
+
+                  {/* Step 5 — ranked categories. Stops at the category. */}
+                  <RaceCategories
+                    subjectId={run.subjectId}
+                    enabled={Boolean(activePersona?.attributeGroups?.length)}
+                    initialCategories={loadedCategories}
                   />
                 </>
               )}

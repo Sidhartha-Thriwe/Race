@@ -95,7 +95,7 @@ function looksLikePhone(candidate: string): boolean {
  * evidence faithfully is exactly how one ends up in a basis line. Enforcing it
  * here means the stored persona is clean regardless of what came back.
  */
-function scrubIdentity(text: string): { text: string; hits: number } {
+export function scrubIdentity(text: string): { text: string; hits: number } {
   let hits = 0;
   const count = (_m: string) => { hits += 1; return "[redacted]"; };
   const out = text
@@ -106,7 +106,7 @@ function scrubIdentity(text: string): { text: string; hits: number } {
   return { text: out, hits };
 }
 
-function scrubDeep(value: unknown, tally: { hits: number }): unknown {
+export function scrubDeep(value: unknown, tally: { hits: number }): unknown {
   if (typeof value === "string") {
     const { text, hits } = scrubIdentity(value);
     tally.hits += hits;
@@ -136,7 +136,7 @@ function isWeakBasis(basis: string): boolean {
   return !hasSpecific;
 }
 
-function parseJson(text: string): any {
+export function parseJson(text: string): any {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   const body = (fenced ? fenced[1] : text).trim();
   try { return JSON.parse(body); } catch { /* fall through */ }

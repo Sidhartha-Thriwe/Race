@@ -46,7 +46,9 @@ const BAND_STYLE: Record<string, string> = {
 
 export const RacePersona: React.FC<{
   subjectId: string; enabled: boolean; initialPersona?: Persona | null;
-}> = ({ subjectId, enabled, initialPersona }) => {
+  /** Lets step 5 gate on a persona that actually completed, not just a click. */
+  onPersona?: (persona: Persona) => void;
+}> = ({ subjectId, enabled, initialPersona, onPersona }) => {
   const [persona, setPersona] = useState<Persona | null>(initialPersona ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,7 +112,7 @@ export const RacePersona: React.FC<{
       if (timer.current) window.clearInterval(timer.current);
       setBusy(false);
       if (r.data.status === 'failed') setError(r.data.error ?? 'persona synthesis failed');
-      else { setPersona(r.data); setTab('table'); }
+      else { setPersona(r.data); setTab('table'); onPersona?.(r.data); }
     }, 5000);
   };
 

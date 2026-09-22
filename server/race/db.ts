@@ -52,6 +52,7 @@ const RUNS_COLLECTION = "race_runs";
 const TARGETS_COLLECTION = "race_targets";
 const SCRAPES_COLLECTION = "race_scrapes";
 const PERSONAS_COLLECTION = "race_personas";
+const CATEGORIES_COLLECTION = "race_categories";
 
 function appletConfig(): {
   projectId?: string;
@@ -138,6 +139,7 @@ function ensureDirs() {
   fs.mkdirSync(path.join(DATA_DIR, "targets"), { recursive: true });
   fs.mkdirSync(path.join(DATA_DIR, "scrapes"), { recursive: true });
   fs.mkdirSync(path.join(DATA_DIR, "personas"), { recursive: true });
+  fs.mkdirSync(path.join(DATA_DIR, "categories"), { recursive: true });
 }
 
 async function writeAtomic(file: string, data: string) {
@@ -375,6 +377,34 @@ export async function fetchPersona(subjectId: string): Promise<any | null> {
     }
   }
   return readJsonFile(path.join(DATA_DIR, "personas", `${subjectId}.json`), null);
+}
+
+/** Step 5 output, one current category ranking per subject. */
+export async function putCategories(subjectId: string, categories: any): Promise<Backend> {
+  if (backend === "firestore" && firestore) {
+    try {
+      await setDoc(doc(firestore, CATEGORIES_COLLECTION, subjectId),
+                   JSON.parse(JSON.stringify(categories)));
+      return "firestore";
+    } catch (err: any) {
+      console.warn(`[race] Firestore putCategories error: ${err?.message}; falling back to filesystem`);
+    }
+  }
+  await writeAtomic(path.join(DATA_DIR, "categories", `${subjectId}.json`),
+                    JSON.stringify(categories, null, 2));
+  return "filesystem";
+}
+
+export async function fetchCategories(subjectId: string): Promise<any | null> {
+  if (backend === "firestore" && firestore) {
+    try {
+      const snap = await getDoc(doc(firestore, CATEGORIES_COLLECTION, subjectId));
+      return snap.exists() ? snap.data() : null;
+    } catch (err: any) {
+      console.warn(`[race] Firestore fetchCategories error: ${err?.message}; falling back to filesystem`);
+    }
+  }
+  return readJsonFile(path.join(DATA_DIR, "categories", `${subjectId}.json`), null);
 }
 
 export async function loadWorkspaceId(): Promise<string | null> {
