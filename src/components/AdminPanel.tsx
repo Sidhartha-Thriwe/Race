@@ -10,6 +10,7 @@ import { LeadQualification } from './LeadQualification';
 import { UsersAccess } from './UsersAccess';
 import { CategoriesManagement } from './CategoriesManagement';
 import { InternalInsight } from './InternalInsight';
+import { LeadDashboardV2 } from './LeadDashboardV2';
 import { Menu } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -375,6 +376,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
               {/* Core Dashboard Grid */}
               <div className="flex-1">
                 <AdminDashboardView 
+                  selectedPeriod={selectedPeriod} 
+                  campaigns={campaigns}
+                  onNavigateToManagement={(filter) => {
+                    setManagementInitialFilter(filter || 'All');
+                    setActiveSection('management');
+                  }}
+                  onNewCampaign={() => {
+                    setManagementInitialFilter('All');
+                    setActiveSection('builder');
+                  }}
+                  onSwitchToV2={() => setActiveSection('leadgen-dashboard-v2')}
+                />
+              </div>
+            </>
+          ) : activeSection === 'leadgen-dashboard-v2' ? (
+            <>
+              {/* Core Dashboard Header for V2 */}
+              <AdminHeader 
+                title="Dashboard v2"
+                selectedPeriod={selectedPeriod} 
+                onPeriodChange={setSelectedPeriod} 
+                onNewCampaign={() => {
+                  setManagementInitialFilter('All');
+                  setActiveSection('builder');
+                }}
+              />
+
+              {/* Lead Dashboard V2 Component */}
+              <div className="flex-1">
+                <LeadDashboardV2 
                   selectedPeriod={selectedPeriod} 
                   campaigns={campaigns}
                   onNavigateToManagement={(filter) => {

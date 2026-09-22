@@ -22,6 +22,7 @@ import {
 export type GlobalSectionType = 
   | 'dashboard' 
   | 'leadgen-dashboard' 
+  | 'leadgen-dashboard-v2'
   | 'builder' 
   | 'management' 
   | 'leads' 

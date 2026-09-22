@@ -6,9 +6,15 @@ interface AdminHeaderProps {
   selectedPeriod: DashboardPeriod;
   onPeriodChange: (period: DashboardPeriod) => void;
   onNewCampaign: () => void;
+  title?: string;
 }
 
-export const AdminHeader: React.FC<AdminHeaderProps> = ({ selectedPeriod, onPeriodChange, onNewCampaign }) => {
+export const AdminHeader: React.FC<AdminHeaderProps> = ({ 
+  selectedPeriod, 
+  onPeriodChange, 
+  onNewCampaign,
+  title = "Dashboard" 
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -33,7 +39,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ selectedPeriod, onPeri
           Lead Gen
         </p>
         <h2 className="text-2xl font-bold tracking-tight text-neutral-900 mt-1">
-          Dashboard
+          {title}
         </h2>
       </div>
 

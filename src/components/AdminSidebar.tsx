@@ -17,6 +17,7 @@ import {
 export type AdminSection = 
   | 'dashboard' 
   | 'leadgen-dashboard' 
+  | 'leadgen-dashboard-v2'
   | 'builder' 
   | 'management' 
   | 'leads' 
@@ -127,6 +128,24 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               }`}
             >
               <span>Dashboard</span>
+            </button>
+            
+            {/* Dashboard v2 (New!) */}
+            <button 
+              onClick={() => setActiveSection('leadgen-dashboard-v2')}
+              className={`w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md cursor-pointer transition-all ${
+                activeSection === 'leadgen-dashboard-v2'
+                  ? 'text-white bg-[#2563eb]/90 font-bold'
+                  : 'text-neutral-400 hover:bg-white/5 hover:text-white'
+              }`}
+              id="sidebar_leadgen_dashboard_v2_btn"
+            >
+              <div className="flex items-center gap-1.5">
+                <span>Dashboard v2</span>
+                <span className="text-[9px] px-1.5 py-0.5 bg-blue-500/20 text-blue-300 font-bold rounded">
+                  v2
+                </span>
+              </div>
             </button>
             
             {/* Campaign builder */}

@@ -8,13 +8,15 @@ interface AdminDashboardViewProps {
   campaigns?: Campaign[];
   onNavigateToManagement?: (filter: 'All' | 'Outside Target' | 'Within Target') => void;
   onNewCampaign?: () => void;
+  onSwitchToV2?: () => void;
 }
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ 
   selectedPeriod, 
   campaigns = [], 
   onNavigateToManagement,
-  onNewCampaign 
+  onNewCampaign,
+  onSwitchToV2
 }) => {
   const [activeBudgetHover, setActiveBudgetHover] = useState<number | null>(null);
 
@@ -683,6 +685,33 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   return (
     <div className="space-y-6 pb-12 select-none font-sans">
       
+      {/* Dashboard V2 Discovery Banner */}
+      {onSwitchToV2 && (
+        <div className="bg-gradient-to-r from-blue-50 via-indigo-50/40 to-white border border-blue-200/80 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-xs shadow-2xs">
+              v2
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-neutral-900">Lead Dashboard V2 is live</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-600 text-white font-mono font-bold">NEW</span>
+              </div>
+              <p className="text-[11.5px] text-neutral-500 mt-0.5">
+                Multi-metric Northstar/Guardrail cards and multi-dimensional slices (Campaign, Category, Geography, Persona).
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onSwitchToV2}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-2xs transition-all cursor-pointer whitespace-nowrap self-stretch sm:self-auto justify-center"
+          >
+            <span>Open Dashboard v2</span>
+            <ArrowUpRight size={13} />
+          </button>
+        </div>
+      )}
+
       {/* 1. KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
         
