@@ -108,6 +108,15 @@ export interface RunRecord {
   raw?: unknown;           // credentials scrubbed before disk, always
   summary?: unknown;       // display-only view of the fetch (see summary.ts)
   views?: unknown;         // the five export-shaped views (see extract.ts)
+  /**
+   * A one-vendor screening pass, not a full capture.
+   *
+   * Flagged because the downstream lookups take "the latest completed run for
+   * this subject" — so without this, a ₹0.34 screening call would silently
+   * become the evidence base for steps 4 and 5, which would then reason from a
+   * fraction of the footprint and never say so.
+   */
+  screening?: boolean;
   error?: string;
 }
 

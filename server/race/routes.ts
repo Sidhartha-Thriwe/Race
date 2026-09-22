@@ -14,7 +14,7 @@
 
 import { Router, type Request, type Response, type NextFunction } from "express";
 import {
-  configuredVendors, osintCredits, VENDORS, type VendorName,
+  configuredVendors, osintCredits, bteVersion, VENDORS, type VendorName,
 } from "./vendors.js";
 import {
   resolveSubjectId, subjectIndex, subjectSummaries, ledgerSnapshot, newRunId,
@@ -176,6 +176,7 @@ export function raceRouter(): Router {
       categories: { ...categoriesConfigured(),
                     model: process.env.RACE_CATEGORIES_MODEL ?? process.env.RACE_PERSONA_MODEL ?? "claude-sonnet-5" },
       osintCredits: await osintCredits(),
+      bte: await bteVersion(),
       ledger: await ledgerSnapshot(),
       storage: storeInfo(),
       dataDir: dataDir(),
@@ -191,7 +192,7 @@ export function raceRouter(): Router {
   r.post("/run", json(async (req, res) => {
     const {
       email, useCase = "customer_insight", sector, ticketBand,
-      vendors, consentBasis, normalise = false,
+      vendors, consentBasis, normalise = false, screening = false,
     } = (req.body ?? {}) as Record<string, any>;
 
     // Stage 2 (the skill) is opt-in. Fetch-only needs no Anthropic key at all,
@@ -232,6 +233,7 @@ export function raceRouter(): Router {
       emailHash: hashEmail(address),
       ...(process.env.RACE_LOG_EMAIL === "true" ? { email: address } : {}),
       useCase, sector, ticketBand,
+      ...(screening ? { screening: true } : {}),
       startedAt: new Date().toISOString(),
       status: "running",
       vendorsCalled: [],
@@ -402,7 +404,7 @@ export function raceRouter(): Router {
     // The most recent completed run for this subject is the source. A failed
     // run has no payload worth planning against.
     const index = (await listRuns(500)) as any[];
-    const row = index.find((r) => r.subjectId === subjectId && r.status === "completed");
+    const row = index.find((r) => r.subjectId === subjectId && r.status === "completed" && !r.screening);
     if (!row) {
       return res.status(409).json({
         error: `no completed step 1 run for ${subjectId} — run step 1 first`,
@@ -472,7 +474,7 @@ export function raceRouter(): Router {
     if (!cfg.ok) return res.status(503).json({ error: cfg.reason });
 
     const index = (await listRuns(500)) as any[];
-    const row = index.find((r) => r.subjectId === subjectId && r.status === "completed");
+    const row = index.find((r) => r.subjectId === subjectId && r.status === "completed" && !r.screening);
     if (!row) return res.status(409).json({ error: "no completed step 1 run for this subject" });
 
     const run = withViews(await getRun(row.runId));
@@ -545,7 +547,7 @@ export function raceRouter(): Router {
     }
 
     const index = (await listRuns(500)) as any[];
-    const row = index.find((r) => r.subjectId === subjectId && r.status === "completed");
+    const row = index.find((r) => r.subjectId === subjectId && r.status === "completed" && !r.screening);
     if (!row) return res.status(409).json({ error: "no completed step 1 run for this subject" });
 
     const run = withViews(await getRun(row.runId));
@@ -643,7 +645,7 @@ export function raceRouter(): Router {
   r.get("/subjects/:subjectId/bundle", json(async (req, res) => {
     const subjectId = String(req.params.subjectId).trim();
     const index = (await listRuns(500)) as any[];
-    const row = index.find((r) => r.subjectId === subjectId && r.status === "completed");
+    const row = index.find((r) => r.subjectId === subjectId && r.status === "completed" && !r.screening);
     if (!row) return res.status(404).json({ error: `no completed run for ${subjectId}` });
 
     const map = await subjectIndex();

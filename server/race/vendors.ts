@@ -186,6 +186,31 @@ export async function osintCredits(): Promise<{ ok: boolean; credits?: number; e
   }
 }
 
+/**
+ * Free, and the only way to tell "the key is wrong" from "this person has no
+ * footprint" before spending. Those two failures look identical at the far end
+ * of the pipeline and the second is the expensive one to misdiagnose — it is
+ * how a subject got written up as signal-poor when the real problem was the
+ * input.
+ */
+export async function bteVersion(): Promise<{ ok: boolean; version?: string; error?: string }> {
+  const key = process.env.BTE_API_KEY;
+  if (!key) return { ok: false, error: "BTE_API_KEY not configured" };
+  try {
+    const res = await fetch("https://api.behindtheemail.com/v1", {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(20_000),
+    });
+    const body: any = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { ok: false, error: `HTTP ${res.status}${res.status === 401 ? " — key rejected" : ""}` };
+    }
+    return { ok: true, version: body?.version ?? body?.data?.version ?? JSON.stringify(body)?.slice(0, 80) };
+  } catch (e: any) {
+    return { ok: false, error: `${e?.name}: ${e?.message}` };
+  }
+}
+
 export const RACE_FETCH_VENDOR_TOOL = {
   name: "race_fetch_vendor",
   description:

@@ -53,6 +53,7 @@ export function useRaceRun() {
   const [subjects, setSubjects] = useState<SubjectSummary[]>([]);
   const [estimateINR, setEstimateINR] = useState<number | null>(null);
   const [spentThisMonth, setSpentThisMonth] = useState<number | null>(null);
+  const [bte, setBte] = useState<{ ok: boolean; version?: string; error?: string } | null>(null);
   /** True when what is on screen came from storage rather than a live call. */
   const [fromStore, setFromStore] = useState(false);
   const timer = useRef<number | null>(null);
@@ -61,6 +62,7 @@ export function useRaceRun() {
     const st = await raceFetch<any>('/api/race/status');
     if (st.ok && st.data) {
       setStorage(st.data.storage ?? null);
+      setBte(st.data.bte ?? null);
       const configured = (st.data.vendors ?? []).filter((v: any) => v.configured);
       setEstimateINR(configured.reduce((a: number, v: any) => a + (v.costINR ?? 0), 0));
       const month = new Date().toISOString().slice(0, 7);
@@ -97,8 +99,16 @@ export function useRaceRun() {
     return res.data as { subjectId: string; email?: string; run: Run; plan: any };
   }, []);
 
+  /**
+   * `vendors` narrows the call to a named subset and marks the run as a
+   * screening pass, which keeps it out of the "latest completed run" lookup
+   * that steps 4 and 5 reason from. A one-vendor pass is a cheap look, not a
+   * capture, and letting it stand in for one would be the same bug this
+   * pipeline keeps producing.
+   */
   const start = useCallback(async (opts: {
     email: string; sector?: string; ticketBand?: string; useCase?: string;
+    vendors?: string[];
   }) => {
     setError(null); setHint(null); setRun(null); setBusy(true); setFromStore(false);
     const res = await raceFetch<any>('/api/race/run', {
@@ -109,6 +119,7 @@ export function useRaceRun() {
         sector: opts.sector,
         ticketBand: opts.ticketBand,
         consentBasis: 'Opt-in: internal employee, consent on file',
+        ...(opts.vendors?.length ? { vendors: opts.vendors, screening: true } : {}),
       },
     });
     if (!res.ok || !res.data) {
@@ -131,7 +142,7 @@ export function useRaceRun() {
     }, 2000);
   }, [refreshMeta]);
 
-  return { run, busy, error, hint, storage, subjects, estimateINR,
+  return { run, busy, error, hint, storage, subjects, estimateINR, bte,
            spentThisMonth, fromStore, start, loadSubject, refreshMeta };
 }
 
