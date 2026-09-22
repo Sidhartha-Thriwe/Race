@@ -22,7 +22,7 @@ import {
 } from "./store.js";
 import { normaliseWithSkill, skillConfigured } from "./claude.js";
 import { storeInfo, putTargets, fetchTargets, putScrape, fetchScrape,
-         putPersona, fetchPersona } from "./db.js";
+         putPersona, fetchPersona, loadWorkspaceId, saveWorkspaceId } from "./db.js";
 import { buildPersona, personaConfigured } from "./persona.js";
 import { runScrape } from "./scrape.js";
 import { apifyConfigured } from "./apify.js";
@@ -52,13 +52,20 @@ const json = (fn: Handler) => async (req: Request, res: Response) => {
   } catch (e: any) {
     const message = `${e?.name ?? "Error"}: ${e?.message ?? String(e)}`;
     console.error("[race] route failed:", message);
+    const isWorkspaceError = Boolean(
+      e?.needsWorkspaceId || /anthropic-workspace-id|workspace/i.test(message)
+    );
     if (!res.headersSent) {
-      res.status(500).json({
-        error: message,
-        hint: /permission|denied/i.test(message)
-          ? "Firestore refused the operation — a collection used here is " +
-            "probably missing from firestore.rules."
+      res.status(isWorkspaceError ? 400 : (e?.status || 500)).json({
+        error: isWorkspaceError
+          ? "Anthropic Workspace ID required: This API key is an organization-level key. Please provide your Workspace ID (e.g. wrkspc_...)."
+          : message,
+        hint: isWorkspaceError
+          ? "Log in to platform.claude.com → Settings → Workspaces to copy your Workspace ID, then provide it in the input below."
+          : /permission|denied/i.test(message)
+          ? "Firestore refused the operation — a collection used here is probably missing from firestore.rules."
           : undefined,
+        needsWorkspaceId: isWorkspaceError,
       });
     }
   }
@@ -467,16 +474,38 @@ export function raceRouter(): Router {
     const run = withViews(await getRun(row.runId));
     if (!run?.views) return res.status(409).json({ error: "that run has no views to reason from" });
 
+    const incomingWorkspace =
+      (req.headers["x-anthropic-workspace-id"] as string)?.trim() ||
+      (req.body?.workspaceId as string)?.trim();
+    if (incomingWorkspace) {
+      await saveWorkspaceId(incomingWorkspace);
+    }
+
     const persona = await buildPersona({
       subjectId,
       useCase: run.useCase, sector: run.sector, ticketBand: run.ticketBand,
       views: run.views,
       plan: await fetchTargets(subjectId),
       scrape: await fetchScrape(subjectId),
+      workspaceId: incomingWorkspace,
     });
 
     const storedIn = await putPersona(subjectId, persona);
     res.json({ ...persona, storedIn });
+  }));
+
+  r.post("/config/workspace", json(async (req, res) => {
+    const workspaceId = String(req.body?.workspaceId ?? "").trim();
+    if (!workspaceId) {
+      return res.status(400).json({ error: "workspaceId is required" });
+    }
+    await saveWorkspaceId(workspaceId);
+    res.json({ ok: true, workspaceId });
+  }));
+
+  r.get("/config/workspace", json(async (_req, res) => {
+    const workspaceId = (await loadWorkspaceId()) ?? null;
+    res.json({ workspaceId });
   }));
 
   r.get("/subjects/:subjectId/persona", json(async (req, res) => {

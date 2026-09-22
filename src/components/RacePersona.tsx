@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, AlertTriangle, Download, Sparkles, Info } from 'lucide-react';
+import { Loader2, AlertTriangle, Download, Sparkles, Info, Key, Check } from 'lucide-react';
 import { raceFetch } from './raceApi';
 
 /**
@@ -49,27 +49,117 @@ export const RacePersona: React.FC<{
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [tab, setTab] = useState<'table' | 'traits' | 'summary'>('table');
+  const [workspaceInput, setWorkspaceInput] = useState<string>(() => sessionStorage.getItem('anthropic_workspace_id') ?? '');
+  const [showWorkspacePrompt, setShowWorkspacePrompt] = useState(false);
+  const [savingWorkspace, setSavingWorkspace] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => { setPersona(initialPersona ?? null); setError(null); },
             [initialPersona, subjectId]);
 
-  const run = async () => {
+  useEffect(() => {
+    // Check if server or storage already has workspaceId configured
+    raceFetch<{ workspaceId: string | null }>('/api/race/config/workspace').then((res) => {
+      if (res.ok && res.data?.workspaceId) {
+        setWorkspaceInput(res.data.workspaceId);
+        sessionStorage.setItem('anthropic_workspace_id', res.data.workspaceId);
+      }
+    });
+  }, []);
+
+  const run = async (overrideWorkspace?: string) => {
     setBusy(true); setError(null); setHint(null); setPersona(null);
-    const res = await raceFetch<Persona>(`/api/race/subjects/${subjectId}/persona`,
-                                         { method: 'POST' });
+    const ws = (overrideWorkspace !== undefined ? overrideWorkspace : workspaceInput).trim();
+    if (ws) {
+      sessionStorage.setItem('anthropic_workspace_id', ws);
+    }
+    const res = await raceFetch<Persona>(`/api/race/subjects/${subjectId}/persona`, {
+      method: 'POST',
+      body: ws ? { workspaceId: ws } : {},
+    });
     setBusy(false);
     if (!res.ok || !res.data) {
-      setError(res.error ?? 'request failed'); setHint(res.hint ?? null); return;
+      setError(res.error ?? 'request failed');
+      setHint(res.hint ?? null);
+      if (res.needsWorkspaceId || /anthropic-workspace-id|workspace/i.test(res.error ?? '')) {
+        setShowWorkspacePrompt(true);
+      }
+      return;
     }
-    setPersona(res.data); setTab('table');
+    setShowWorkspacePrompt(false);
+    setPersona(res.data);
+    setTab('table');
+  };
+
+  const handleSaveAndRun = async () => {
+    const trimmed = workspaceInput.trim();
+    if (!trimmed) return;
+    setSavingWorkspace(true);
+    sessionStorage.setItem('anthropic_workspace_id', trimmed);
+    await raceFetch('/api/race/config/workspace', {
+      method: 'POST',
+      body: { workspaceId: trimmed },
+    });
+    setSavingWorkspace(false);
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 2000);
+    await run(trimmed);
   };
 
   const a = persona?.audit;
 
   return (
     <div className="space-y-2.5">
+      {/* Anthropic Workspace Configuration Banner if required or toggled */}
+      {showWorkspacePrompt && (
+        <div className="border border-amber-300 bg-amber-50 rounded-lg p-3 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+            <Key size={14} className="text-amber-700" />
+            <span>Anthropic Workspace ID Required</span>
+          </div>
+          <p className="text-[11px] text-amber-800 leading-snug">
+            Your Anthropic API key is an organization-level key and requires a Workspace ID header.
+            Find your Workspace ID in{' '}
+            <a
+              href="https://platform.claude.com/settings/workspaces"
+              target="_blank"
+              rel="noreferrer"
+              className="underline font-semibold text-amber-900"
+            >
+              Claude Console → Settings → Workspaces
+            </a>{' '}
+            (starts with <code className="bg-amber-100 px-1 py-0.5 rounded text-[10.5px] font-mono">wrkspc_</code>):
+          </p>
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="text"
+              placeholder="wrkspc_01AbCdEf23GhIj..."
+              value={workspaceInput}
+              onChange={(e) => setWorkspaceInput(e.target.value)}
+              disabled={busy || savingWorkspace}
+              className="flex-1 px-2.5 py-1.5 text-xs font-mono bg-white border border-amber-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500 text-neutral-800"
+            />
+            <button
+              type="button"
+              disabled={!workspaceInput.trim() || busy || savingWorkspace}
+              onClick={handleSaveAndRun}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-amber-700 hover:bg-amber-800 rounded-md transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              {savingWorkspace ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : savedSuccess ? (
+                <Check size={12} />
+              ) : (
+                <Sparkles size={12} />
+              )}
+              <span>{savingWorkspace ? 'Saving…' : 'Save & Build'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       <button
-        type="button" onClick={run} disabled={!enabled || busy}
+        type="button" onClick={() => run()} disabled={!enabled || busy}
         className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-xs transition-all ${
           !enabled || busy
             ? 'bg-neutral-100 text-neutral-400 border border-neutral-200 cursor-not-allowed'
@@ -79,13 +169,23 @@ export const RacePersona: React.FC<{
         {busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
         <span>{busy ? 'Synthesising persona…' : 'Step 4 Build Attributes'}</span>
       </button>
-      {!enabled && (
-        <p className="text-[10px] text-neutral-400 text-center">
-          Complete step 3 first — step 4 reasons over everything the earlier steps found.
-        </p>
-      )}
 
-      {error && (
+      <div className="flex items-center justify-between text-[10px] text-neutral-400 px-1">
+        {!enabled ? (
+          <span>Complete step 3 first — step 4 reasons over prior outputs.</span>
+        ) : (
+          <span>Step 4 synthesises attributes and computed traits.</span>
+        )}
+        <button
+          type="button"
+          onClick={() => setShowWorkspacePrompt(!showWorkspacePrompt)}
+          className="text-neutral-500 hover:text-neutral-800 underline cursor-pointer ml-auto"
+        >
+          {workspaceInput ? 'Workspace ID set' : 'Set Workspace ID'}
+        </button>
+      </div>
+
+      {error && !showWorkspacePrompt && (
         <div className="flex items-start gap-2 px-3 py-2 bg-red-50 border border-red-100 rounded-lg">
           <AlertTriangle size={12} className="text-red-500 mt-0.5 shrink-0" />
           <div>

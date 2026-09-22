@@ -11,11 +11,16 @@
  * it actually was.
  */
 
-export interface ApiError { error: string; hint?: string }
+export interface ApiError { error: string; hint?: string; needsWorkspaceId?: boolean }
 
 const headers = (): Record<string, string> => {
   const token = sessionStorage.getItem('race_token') ?? '';
-  return { 'Content-Type': 'application/json', ...(token ? { 'x-race-token': token } : {}) };
+  const workspaceId = sessionStorage.getItem('anthropic_workspace_id') ?? '';
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'x-race-token': token } : {}),
+    ...(workspaceId ? { 'x-anthropic-workspace-id': workspaceId } : {}),
+  };
 };
 
 export interface RaceResult<T> {
@@ -24,6 +29,7 @@ export interface RaceResult<T> {
   error?: string;
   /** Extra context for the error — what the server actually sent, or what to check. */
   hint?: string;
+  needsWorkspaceId?: boolean;
 }
 
 export async function raceFetch<T>(
@@ -63,6 +69,7 @@ export async function raceFetch<T>(
       ok: false,
       error: (data as ApiError)?.error ?? `HTTP ${res.status}`,
       hint: (data as ApiError)?.hint,
+      needsWorkspaceId: Boolean((data as ApiError)?.needsWorkspaceId),
     };
   }
   return { ok: true, data: data as T };

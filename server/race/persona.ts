@@ -15,6 +15,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { PERSONA_SYSTEM_PROMPT, buildPersonaInput } from "./personaPrompt.js";
 import type { RunStep } from "./store.js";
+import { loadWorkspaceId } from "./db.js";
 
 const MODEL = process.env.RACE_PERSONA_MODEL ?? "claude-sonnet-5";
 const MAX_TOKENS = Number(process.env.RACE_PERSONA_MAX_TOKENS ?? 16000);
@@ -47,11 +48,11 @@ export interface PersonaResult {
   steps: RunStep[];
 }
 
-export function personaConfigured(): { ok: boolean; reason?: string } {
+export function personaConfigured(): { ok: boolean; reason?: string; workspaceId?: string | null } {
   if (!process.env.ANTHROPIC_API_KEY) {
     return { ok: false, reason: "ANTHROPIC_API_KEY is not set" };
   }
-  return { ok: true };
+  return { ok: true, workspaceId: process.env.ANTHROPIC_WORKSPACE_ID || null };
 }
 
 /* ------------------------------------------------------------ output guards */
@@ -154,15 +155,22 @@ export async function buildPersona(opts: {
   subjectId: string;
   useCase?: string; sector?: string; ticketBand?: string;
   views: any; plan?: any; scrape?: any;
+  workspaceId?: string;
 }): Promise<PersonaResult> {
   const steps: RunStep[] = [];
   const note = (level: RunStep["level"], msg: string, detail?: unknown) =>
     steps.push({ t: new Date().toISOString(), level, msg, detail });
 
+  const effectiveWorkspace =
+    opts.workspaceId?.trim() ||
+    process.env.ANTHROPIC_WORKSPACE_ID?.trim() ||
+    (await loadWorkspaceId()) ||
+    undefined;
+
   const client = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
-    ...(process.env.ANTHROPIC_WORKSPACE_ID
-      ? { defaultHeaders: { "anthropic-workspace-id": process.env.ANTHROPIC_WORKSPACE_ID } }
+    ...(effectiveWorkspace
+      ? { defaultHeaders: { "anthropic-workspace-id": effectiveWorkspace } }
       : {}),
   });
 
@@ -174,15 +182,31 @@ export async function buildPersona(opts: {
     breached: opts.views?.counts?.breached ?? 0,
     reviews: opts.views?.counts?.reviews ?? 0,
     scrapedPlatforms: Object.keys(opts.scrape?.data ?? {}).length,
+    workspaceConfigured: Boolean(effectiveWorkspace),
   });
 
-  const resp: any = await client.messages.create({
-    model: MODEL,
-    max_tokens: MAX_TOKENS,
-    temperature: 0,
-    system: PERSONA_SYSTEM_PROMPT,
-    messages: [{ role: "user", content: input }],
-  });
+  let resp: any;
+  try {
+    resp = await client.messages.create({
+      model: MODEL,
+      max_tokens: MAX_TOKENS,
+      system: PERSONA_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: input }],
+    });
+  } catch (err: any) {
+    const msg = err?.message ?? String(err);
+    if (/anthropic-workspace-id|workspace/i.test(msg)) {
+      note("error", "Anthropic API requires a Workspace ID for this API key");
+      const e = new Error(
+        "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header with the ID of the workspace to use. Add the header, or use an API key that is scoped to a workspace."
+      );
+      (e as any).needsWorkspaceId = true;
+      (e as any).status = 400;
+      throw e;
+    }
+    note("error", `Anthropic API error: ${msg}`);
+    throw err;
+  }
 
   const text = (resp.content ?? [])
     .filter((b: any) => b.type === "text").map((b: any) => b.text).join("");

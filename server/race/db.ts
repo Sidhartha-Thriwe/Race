@@ -117,6 +117,7 @@ export async function initStore(): Promise<{ backend: Backend; error: string | n
     backend = "firestore";
     initError = null;
     console.log(`[race] storage: firestore (${projectId} / ${databaseId ?? "default"})`);
+    await loadWorkspaceId();
   } catch (e: any) {
     initError = `${e?.name ?? "Error"}: ${e?.message ?? String(e)}`;
     backend = "filesystem";
@@ -374,6 +375,47 @@ export async function fetchPersona(subjectId: string): Promise<any | null> {
     }
   }
   return readJsonFile(path.join(DATA_DIR, "personas", `${subjectId}.json`), null);
+}
+
+export async function loadWorkspaceId(): Promise<string | null> {
+  if (process.env.ANTHROPIC_WORKSPACE_ID?.trim()) {
+    return process.env.ANTHROPIC_WORKSPACE_ID.trim();
+  }
+  if (backend === "firestore" && firestore) {
+    try {
+      const snap = await getDoc(doc(firestore, "race_meta", "config"));
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data?.workspaceId) {
+          process.env.ANTHROPIC_WORKSPACE_ID = data.workspaceId;
+          return data.workspaceId;
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[race] Firestore loadWorkspaceId error: ${err?.message}`);
+    }
+  }
+  const local = await readJsonFile<{ workspaceId?: string }>(path.join(DATA_DIR, "config.json"), {});
+  if (local?.workspaceId) {
+    process.env.ANTHROPIC_WORKSPACE_ID = local.workspaceId;
+    return local.workspaceId;
+  }
+  return null;
+}
+
+export async function saveWorkspaceId(workspaceId: string): Promise<void> {
+  const trimmed = workspaceId.trim();
+  if (!trimmed) return;
+  process.env.ANTHROPIC_WORKSPACE_ID = trimmed;
+  if (backend === "firestore" && firestore) {
+    try {
+      await setDoc(doc(firestore, "race_meta", "config"), { workspaceId: trimmed, updatedAt: new Date().toISOString() }, { merge: true });
+      return;
+    } catch (err: any) {
+      console.warn(`[race] Firestore saveWorkspaceId error: ${err?.message}; falling back to filesystem`);
+    }
+  }
+  await writeAtomic(path.join(DATA_DIR, "config.json"), JSON.stringify({ workspaceId: trimmed }, null, 2));
 }
 
 export function dataDir(): string {
