@@ -69,9 +69,16 @@ export const VENDORS: Record<VendorName, VendorSpec> = {
     body: (q, t, o) => ({
       type: t,
       query: q,
-      // 25-80s, and a real filter: a module that misses the window is skipped
-      // and its absence is indistinguishable from a module with no result.
-      timeout: o.timeout ?? 60,
+      // The vendor allows 25-80s, and this is a real filter rather than a
+      // safety margin: a module that misses the window is skipped, and its
+      // absence is indistinguishable from a module with no result.
+      //
+      // Set to the maximum deliberately. Two runs on the same address five
+      // minutes apart returned 36 and then 35 modules — same vendor, same
+      // query, different answer, because slow modules fell outside the 60s
+      // window. Latency is not the constraint here; a quietly incomplete
+      // record is, so buy every module the vendor will give.
+      timeout: o.timeout ?? 80,
       exact_match: o.exact_match ?? true,
       premium: o.premium ?? false,
       premium_modules_only: false,
@@ -134,7 +141,9 @@ export async function raceFetchVendor(
       body: JSON.stringify(
         spec.body(input.query, input.query_type ?? "email", input.options ?? {}),
       ),
-      signal: AbortSignal.timeout(90_000),
+      // Must comfortably exceed the vendor's own 80s timeout, or we abort a
+      // call that was about to succeed and record it as a failure.
+      signal: AbortSignal.timeout(120_000),
     });
 
     const payload = await res.json().catch(() => null);
@@ -202,7 +211,7 @@ export const RACE_FETCH_VENDOR_TOOL = {
         type: "object",
         description:
           "Vendor-specific narrowing. predicta: {networks:[...]} (default ['all']). " +
-          "osint_industries: {timeout:60, premium:false}. " +
+          "osint_industries: {timeout:80, premium:false}. " +
           "behind_the_email: {selectedProviders:[...]} or {excludedProviders:[...]}.",
         additionalProperties: true,
       },
