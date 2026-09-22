@@ -1,0 +1,3 @@
+import { initStore } from "./server/race/db.js";
+import { resolveSubjectId } from "./server/race/store.js";
+(async () => { await initStore(); console.log("subject:", await resolveSubjectId("check@thriwe.com")); process.exit(0); })();

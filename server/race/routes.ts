@@ -25,6 +25,8 @@ import { storeInfo } from "./db.js";
 import { fetchStage } from "./pipeline.js";
 import { summarise } from "./summary.js";
 
+let warnedOpen = false;
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /**
@@ -36,13 +38,21 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 function requireToken(req: Request, res: Response, next: NextFunction) {
   const expected = process.env.RACE_ADMIN_TOKEN;
   if (!expected) {
-    if (process.env.NODE_ENV === "production") {
-      return res.status(503).json({
-        error: "RACE_ADMIN_TOKEN is not set. Refusing to serve personal data from a " +
-               "public URL without it. Add it in Settings → Secrets.",
-      });
+    // Open by explicit choice. Worth being clear about what that means: these
+    // routes spend vendor credits per call and return identity data on whoever
+    // is asked for, and a published URL is reachable by anyone who finds it —
+    // a login screen in front of the React app does not protect a route that
+    // curl can hit directly.
+    //
+    // Setting RACE_ADMIN_TOKEN in Settings → Secrets closes it again with no
+    // code change: the check below starts enforcing the moment the value
+    // exists. Worth doing before this URL is shared or left up.
+    if (!warnedOpen) {
+      warnedOpen = true;
+      console.warn("[race] /api/race/* is OPEN — RACE_ADMIN_TOKEN is not set. " +
+                   "Anyone with the URL can spend vendor credits and read stored records.");
     }
-    return next(); // local dev
+    return next();
   }
   const given = req.get("x-race-token") ?? "";
   // Compare lengths first so the timing-safe compare never throws on a mismatch.
@@ -76,7 +86,8 @@ export function raceRouter(): Router {
       ledger: await ledgerSnapshot(),
       storage: storeInfo(),
       dataDir: dataDir(),
-      keepRaw: process.env.RACE_KEEP_RAW === "true",
+      keepRaw: process.env.RACE_KEEP_RAW !== "false",
+      accessControl: process.env.RACE_ADMIN_TOKEN ? "token required" : "OPEN — no token set",
       note: storeInfo().backend === "firestore"
         ? "Run records are in Firestore and survive redeploys."
         : "Firestore is not reachable, so records are on the container filesystem — " +

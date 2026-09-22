@@ -26,7 +26,10 @@ export const RaceLiveRun: React.FC<{ useCase?: string; ticketBand?: string }> = 
   useCase = 'customer_insight', ticketBand,
 }) => {
   const [email, setEmail] = useState('');
-  const [token, setToken] = useState(() => sessionStorage.getItem('race_token') ?? '');
+  // No token field: access control is off by default. If RACE_ADMIN_TOKEN is
+  // ever set server-side, drop the value into sessionStorage under 'race_token'
+  // from the console and this keeps working with no code change.
+  const token = sessionStorage.getItem('race_token') ?? '';
   const [run, setRun] = useState<Run | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +68,6 @@ export const RaceLiveRun: React.FC<{ useCase?: string; ticketBand?: string }> = 
 
   const start = async () => {
     setError(null); setRun(null); setBusy(true);
-    sessionStorage.setItem('race_token', token);
     try {
       const res = await fetch('/api/race/run', {
         method: 'POST', headers: headers(),
@@ -109,18 +111,12 @@ export const RaceLiveRun: React.FC<{ useCase?: string; ticketBand?: string }> = 
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        <input
-          type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-          placeholder="Subject email" disabled={busy}
-          className="sm:col-span-2 px-3 py-2 text-xs border border-neutral-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 disabled:bg-neutral-100"
-        />
-        <input
-          type="password" value={token} onChange={(e) => setToken(e.target.value)}
-          placeholder="Access token" disabled={busy}
-          className="px-3 py-2 text-xs border border-neutral-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 disabled:bg-neutral-100"
-        />
-      </div>
+      <input
+        type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+        placeholder="Subject email" disabled={busy}
+        onKeyDown={(e) => { if (e.key === 'Enter' && email.trim() && !busy) start(); }}
+        className="w-full px-3 py-2 text-xs border border-neutral-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 disabled:bg-neutral-100"
+      />
 
       <button
         type="button" onClick={start} disabled={busy || !email.trim()}
