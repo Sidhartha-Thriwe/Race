@@ -1,0 +1,111 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net - Default Deny Catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- REUSABLE HARDENED HELPERS ---
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'sidhartha.rajput@thriwe.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // --- ENTITY VALIDATION HELPERS ---
+
+    function isValidContactInquiry(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.email is string && data.email.size() > 3 && data.email.size() <= 150 &&
+             data.company is string && data.company.size() > 0 && data.company.size() <= 120 &&
+             data.interest is string && data.interest.size() > 0 && data.interest.size() <= 60 &&
+             (!('message' in data) || (data.message is string && data.message.size() <= 2000)) &&
+             data.status in ['new', 'contacted', 'archived'];
+    }
+
+    function isValidCampaign(data) {
+      return data.id is string && isValidId(data.id) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
+             data.industry is string && data.industry.size() <= 100 &&
+             data.budgetPerDay is number && data.budgetPerDay >= 0 &&
+             data.totalBudgetCap is number && data.totalBudgetCap >= 0 &&
+             data.status in ['Active', 'Paused', 'Draft', 'Completed'] &&
+             data.targetCAC is number && data.targetCAC >= 0;
+    }
+
+    function isValidUserProfile(data) {
+      return data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+             data.email is string && data.email.size() <= 150 &&
+             data.role in ['admin', 'manager', 'viewer'];
+    }
+
+    // --- COLLECTION RULES ---
+
+    // 1. Contact Inquiries (/contact_inquiries/{inquiryId})
+    match /contact_inquiries/{inquiryId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isValidId(inquiryId) && 
+                       isValidContactInquiry(incoming()) &&
+                       incoming().status == 'new';
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (isValidContactInquiry(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['status']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    // 2. Campaigns (/campaigns/{campaignId})
+    match /campaigns/{campaignId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() &&
+                       isValidId(campaignId) &&
+                       isValidCampaign(incoming()) &&
+                       (!('ownerId' in incoming()) || incoming().ownerId == request.auth.uid);
+      allow update: if isSignedIn() &&
+                       isValidId(campaignId) &&
+                       isValidCampaign(incoming()) &&
+                       (isAdmin() || existing().ownerId == request.auth.uid || !('ownerId' in existing())) &&
+                       (!('ownerId' in incoming()) || incoming().ownerId == existing().ownerId);
+      allow delete: if isSignedIn() && (isAdmin() || existing().ownerId == request.auth.uid);
+    }
+
+    // 3. User Profiles (/users/{userId})
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) &&
+                       isValidUserProfile(incoming()) &&
+                       (incoming().role == 'viewer' || isAdmin());
+      allow update: if isOwner(userId) &&
+                       isValidUserProfile(incoming()) &&
+                       (incoming().role == existing().role || isAdmin());
+      allow delete: if isAdmin();
+    }
+  }
+}

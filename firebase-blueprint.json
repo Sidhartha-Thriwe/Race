@@ -1,0 +1,188 @@
+{
+  "entities": {
+    "ContactInquiry": {
+      "title": "Contact Inquiry",
+      "description": "Prospective client consultation requests submitted through the Talk to Us modal",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Full name of the contact person",
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "description": "Business email address",
+          "maxLength": 150
+        },
+        "company": {
+          "type": "string",
+          "description": "Organization or enterprise name",
+          "maxLength": 120
+        },
+        "interest": {
+          "type": "string",
+          "description": "Primary solution or engine interest",
+          "maxLength": 60
+        },
+        "message": {
+          "type": "string",
+          "description": "Details regarding the inquiry or business challenge",
+          "maxLength": 2000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp of submission"
+        },
+        "status": {
+          "type": "string",
+          "description": "Workflow review status",
+          "enum": ["new", "contacted", "archived"]
+        }
+      },
+      "required": ["name", "email", "company", "interest", "status"]
+    },
+    "Campaign": {
+      "title": "Campaign",
+      "description": "Lead generation, acquisition and retention marketing campaign configuration",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique campaign alphanumeric identifier",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Campaign descriptive title",
+          "maxLength": 120
+        },
+        "industry": {
+          "type": "string",
+          "description": "Target vertical or sector",
+          "maxLength": 100
+        },
+        "confidence": {
+          "type": "string",
+          "description": "Lead confidence qualification tier",
+          "maxLength": 50
+        },
+        "budgetPerDay": {
+          "type": "number",
+          "description": "Daily expenditure allocation in INR"
+        },
+        "totalBudgetCap": {
+          "type": "number",
+          "description": "Maximum ceiling expenditure in INR"
+        },
+        "startDate": {
+          "type": "string",
+          "description": "Campaign operational launch date",
+          "maxLength": 30
+        },
+        "endDate": {
+          "type": "string",
+          "description": "Campaign conclusion date",
+          "maxLength": 30
+        },
+        "notes": {
+          "type": "string",
+          "description": "Strategic notes and brief",
+          "maxLength": 1000
+        },
+        "status": {
+          "type": "string",
+          "description": "Execution status of the campaign",
+          "enum": ["Active", "Paused", "Draft", "Completed"]
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Human readable creation timestamp",
+          "maxLength": 50
+        },
+        "owner": {
+          "type": "string",
+          "description": "Name of campaign manager",
+          "maxLength": 100
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Authenticated user UID who created the campaign",
+          "maxLength": 128
+        },
+        "targetCAC": {
+          "type": "number",
+          "description": "Target cost per acquired prospect in INR"
+        },
+        "productSector": {
+          "type": "string",
+          "description": "Specific product category or offering",
+          "maxLength": 100
+        },
+        "currentSpend": {
+          "type": "number",
+          "description": "Cumulative budget consumed to date in INR"
+        },
+        "leadsAcquired": {
+          "type": "number",
+          "description": "Total prospects acquired"
+        }
+      },
+      "required": ["id", "name", "industry", "budgetPerDay", "totalBudgetCap", "status", "targetCAC"]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Account details and system access permissions",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth unique user ID",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address",
+          "maxLength": 150
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User full display name",
+          "maxLength": 100
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "User profile avatar URL",
+          "maxLength": 500
+        },
+        "role": {
+          "type": "string",
+          "description": "Assigned access role in the system",
+          "enum": ["admin", "manager", "viewer"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Account creation ISO timestamp"
+        }
+      },
+      "required": ["uid", "email", "role"]
+    }
+  },
+  "firestore": {
+    "/contact_inquiries/{inquiryId}": {
+      "schema": "ContactInquiry",
+      "description": "Collection of client consultation requests from the marketing landing page"
+    },
+    "/campaigns/{campaignId}": {
+      "schema": "Campaign",
+      "description": "Collection of marketing campaigns managed by authenticated team members"
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Collection of user accounts with access roles"
+    }
+  }
+}

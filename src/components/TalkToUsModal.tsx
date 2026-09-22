@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { X, Send, CheckCircle2, Calendar, Sparkles } from 'lucide-react';
+import { X, Send, CheckCircle2, Calendar, Sparkles, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { doc, setDoc } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 
 interface TalkToUsModalProps {
   isOpen: boolean;
@@ -17,14 +19,37 @@ export default function TalkToUsModal({ isOpen, onClose }: TalkToUsModalProps) {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    setErrorMsg(null);
+    const inquiryId = `inq-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const path = `contact_inquiries/${inquiryId}`;
+
+    try {
+      await setDoc(doc(db, 'contact_inquiries', inquiryId), {
+        name: formData.name.trim().slice(0, 100),
+        email: formData.email.trim().slice(0, 150),
+        company: formData.company.trim().slice(0, 120),
+        interest: formData.interest.slice(0, 60),
+        message: formData.message.trim().slice(0, 2000),
+        status: 'new',
+        createdAt: new Date().toISOString()
+      });
       setIsSuccess(true);
-    }, 1500);
+    } catch (error) {
+      console.error('Failed to save inquiry to Firestore:', error);
+      try {
+        handleFirestoreError(error, OperationType.CREATE, path);
+      } catch {
+        // Fallback display to ensure user feedback
+        setErrorMsg('Submission could not be completed. Please try again.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

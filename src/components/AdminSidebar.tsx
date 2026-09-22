@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
   Target, 
@@ -11,8 +11,12 @@ import {
   Shield, 
   HelpCircle, 
   LogOut,
+  LogIn,
   X
 } from 'lucide-react';
+import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, googleProvider, db, handleFirestoreError, OperationType } from '../firebase';
 
 export type AdminSection = 
   | 'dashboard' 
@@ -49,6 +53,54 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   onClose
 }) => {
   const [isSuperAdminOpen, setIsSuperAdminOpen] = useState(true);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      if (user) {
+        // Sync user profile to Firestore
+        try {
+          const userDocRef = doc(db, 'users', user.uid);
+          await setDoc(userDocRef, {
+            uid: user.uid,
+            email: user.email || '',
+            displayName: user.displayName || 'Team Member',
+            photoURL: user.photoURL || '',
+            role: user.email === 'sidhartha.rajput@thriwe.com' ? 'admin' : 'viewer',
+            createdAt: new Date().toISOString()
+          }, { merge: true });
+        } catch (err) {
+          try {
+            handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+          } catch {
+            // Logged in handleFirestoreError
+          }
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsSigningIn(true);
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      console.error('Google Sign In Error:', err);
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const handleGoogleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error('Sign Out Error:', err);
+    }
+  };
   return (
     <>
       {/* Mobile Sidebar Backdrop */}
@@ -390,25 +442,75 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         </div>
 
         {/* User Card */}
-        <div className="flex items-center justify-between bg-white/5 rounded-xl p-3 border border-white/5">
-          <div className="flex items-center gap-2.5 min-w-0">
-            {/* Avatar bubble */}
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#3b82f6] to-[#60a5fa] flex items-center justify-center shrink-0">
-              <span className="font-sans font-bold text-xs tracking-tight text-white">PS</span>
+        {currentUser ? (
+          <div className="bg-white/5 rounded-xl p-3 border border-white/5 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {currentUser.photoURL ? (
+                  <img 
+                    src={currentUser.photoURL} 
+                    alt={currentUser.displayName || 'User'} 
+                    className="w-8 h-8 rounded-lg object-cover border border-white/10 shrink-0"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#3b82f6] to-[#60a5fa] flex items-center justify-center shrink-0">
+                    <span className="font-sans font-bold text-xs tracking-tight text-white">
+                      {(currentUser.displayName || currentUser.email || 'U').slice(0, 2).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                <div className="min-w-0 leading-tight">
+                  <h4 className="text-xs font-semibold text-neutral-200 truncate">
+                    {currentUser.displayName || 'Authenticated User'}
+                  </h4>
+                  <p className="text-[10px] text-neutral-400 truncate">
+                    {currentUser.email}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={handleGoogleSignOut}
+                className="p-1.5 hover:bg-white/10 rounded-lg text-neutral-400 hover:text-red-400 transition-colors cursor-pointer ml-1"
+                title="Sign Out from Firebase"
+              >
+                <LogOut size={15} />
+              </button>
             </div>
-            <div className="min-w-0 leading-tight">
-              <h4 className="text-xs font-semibold text-neutral-200 truncate">Priya Sharma</h4>
-              <p className="text-[10px] text-neutral-400 truncate">Thriwe Admin - Zenith</p>
+            <div className="flex items-center justify-between pt-1 border-t border-white/5 text-[10px]">
+              <span className="inline-flex items-center gap-1 text-emerald-400 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Firebase Connected</span>
+              </span>
+              <button
+                onClick={onLogout}
+                className="text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              >
+                Back to Site
+              </button>
             </div>
           </div>
-          <button 
-            onClick={onLogout}
-            className="p-1.5 hover:bg-white/10 rounded-lg text-neutral-400 hover:text-red-400 transition-colors cursor-pointer ml-1"
-            title="Log Out to Website"
-          >
-            <LogOut size={16} />
-          </button>
-        </div>
+        ) : (
+          <div className="space-y-2">
+            <button
+              onClick={handleGoogleSignIn}
+              disabled={isSigningIn}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gradient-to-r from-[#2563eb] to-[#1d4ed8] hover:from-[#1d4ed8] hover:to-[#1e40af] text-white rounded-xl text-xs font-semibold shadow-md transition-all cursor-pointer disabled:opacity-50"
+            >
+              <LogIn size={14} />
+              <span>{isSigningIn ? 'Signing in...' : 'Sign in with Google'}</span>
+            </button>
+            <div className="flex items-center justify-between px-1 text-[10px] text-neutral-500">
+              <span>Firebase Cloud Auth</span>
+              <button
+                onClick={onLogout}
+                className="hover:text-neutral-300 transition-colors cursor-pointer"
+              >
+                Exit to Website
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </aside>
    </>

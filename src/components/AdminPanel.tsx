@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType, auth } from '../firebase';
 import { AdminSidebar, AdminSection } from './AdminSidebar';
 import { AdminHeader } from './AdminHeader';
 import { AdminDashboardView } from './AdminDashboardView';
@@ -273,27 +275,84 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
     return DEFAULT_CAMPAIGNS;
   });
 
+  // Sync local cache fallback
   useEffect(() => {
     localStorage.setItem('zenith_campaigns', JSON.stringify(campaigns));
   }, [campaigns]);
 
+  // Firestore Realtime Subscription for campaigns
+  useEffect(() => {
+    const campaignsCol = collection(db, 'campaigns');
+    const unsubscribe = onSnapshot(campaignsCol, (snapshot) => {
+      if (!snapshot.empty) {
+        const firestoreCampaigns: Campaign[] = [];
+        snapshot.forEach((docSnap) => {
+          firestoreCampaigns.push(docSnap.data() as Campaign);
+        });
+        setCampaigns(firestoreCampaigns);
+      }
+    }, (error) => {
+      // If permission denied because user is not signed in yet, we keep local state
+      console.warn('Firestore campaigns listener:', error.message);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   // Handler to persist a newly generated or updated campaign
-  const handleSaveCampaign = (newCamp: Campaign) => {
+  const handleSaveCampaign = async (newCamp: Campaign) => {
     setCampaigns(prev => [newCamp, ...prev]);
-    // On launch or draft, redirect straight to Campaign Management per requirements!
     setActiveSection('management');
+
+    try {
+      const campData = {
+        ...newCamp,
+        ownerId: auth.currentUser?.uid || 'anonymous'
+      };
+      await setDoc(doc(db, 'campaigns', newCamp.id), campData);
+    } catch (err) {
+      console.error('Error saving campaign to Firestore:', err);
+      try {
+        handleFirestoreError(err, OperationType.CREATE, `campaigns/${newCamp.id}`);
+      } catch {
+        // Handled
+      }
+    }
   };
 
   // Handler to pause/resume/edit campaigns in the list
-  const handleUpdateStatus = (id: string, newStatus: Campaign['status']) => {
+  const handleUpdateStatus = async (id: string, newStatus: Campaign['status']) => {
     setCampaigns(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
+    try {
+      const target = campaigns.find(c => c.id === id);
+      if (target) {
+        await setDoc(doc(db, 'campaigns', id), { ...target, status: newStatus }, { merge: true });
+      }
+    } catch (err) {
+      console.error('Error updating campaign status:', err);
+      try {
+        handleFirestoreError(err, OperationType.UPDATE, `campaigns/${id}`);
+      } catch {
+        // Handled
+      }
+    }
   };
 
-  const handleUpdateCampaign = (updatedCamp: Campaign) => {
+  const handleUpdateCampaign = async (updatedCamp: Campaign) => {
     setCampaigns(prev => prev.map(c => c.id === updatedCamp.id ? updatedCamp : c));
+    try {
+      await setDoc(doc(db, 'campaigns', updatedCamp.id), updatedCamp, { merge: true });
+    } catch (err) {
+      console.error('Error updating campaign:', err);
+      try {
+        handleFirestoreError(err, OperationType.UPDATE, `campaigns/${updatedCamp.id}`);
+      } catch {
+        // Handled
+      }
+    }
   };
 
-  const handleDuplicateCampaign = (id: string) => {
+  const handleDuplicateCampaign = async (id: string) => {
     const target = campaigns.find(c => c.id === id);
     if (target) {
       const duplicate: Campaign = {
@@ -306,11 +365,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
         status: 'Draft'
       };
       setCampaigns(prev => [duplicate, ...prev]);
+      try {
+        await setDoc(doc(db, 'campaigns', duplicate.id), {
+          ...duplicate,
+          ownerId: auth.currentUser?.uid || 'anonymous'
+        });
+      } catch (err) {
+        try {
+          handleFirestoreError(err, OperationType.CREATE, `campaigns/${duplicate.id}`);
+        } catch {
+          // Handled
+        }
+      }
     }
   };
 
-  const handleArchiveCampaign = (id: string) => {
+  const handleArchiveCampaign = async (id: string) => {
     setCampaigns(prev => prev.filter(c => c.id !== id));
+    try {
+      await deleteDoc(doc(db, 'campaigns', id));
+    } catch (err) {
+      try {
+        handleFirestoreError(err, OperationType.DELETE, `campaigns/${id}`);
+      } catch {
+        // Handled
+      }
+    }
   };
 
   const handlePauseAllActive = () => {
