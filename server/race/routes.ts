@@ -22,6 +22,7 @@ import {
 } from "./store.js";
 import { normaliseWithSkill, skillConfigured } from "./claude.js";
 import { fetchStage } from "./pipeline.js";
+import { summarise } from "./summary.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -81,13 +82,17 @@ export function raceRouter(): Router {
   });
 
   r.post("/run", async (req, res) => {
-    const skill = skillConfigured();
-    if (!skill.ok) return res.status(503).json({ error: skill.reason });
-
     const {
       email, useCase = "customer_insight", sector, ticketBand,
-      vendors, consentBasis,
+      vendors, consentBasis, normalise = false,
     } = (req.body ?? {}) as Record<string, any>;
+
+    // Stage 2 (the skill) is opt-in. Fetch-only needs no Anthropic key at all,
+    // which is what makes the fast path fast.
+    if (normalise) {
+      const skill = skillConfigured();
+      if (!skill.ok) return res.status(503).json({ error: skill.reason });
+    }
 
     if (typeof email !== "string" || !EMAIL_RE.test(email.trim())) {
       return res.status(400).json({ error: "a valid `email` is required" });
@@ -151,6 +156,20 @@ export function raceRouter(): Router {
         raw: fetched.raw,
       };
 
+      const summary = summarise(fetched.raw as Record<string, any>);
+
+      if (!normalise) {
+        // Fast path: the fetch IS the deliverable. No model, no normalisation.
+        await saveRun({
+          ...afterFetch,
+          summary,
+          status: fetched.empty ? "failed" : "completed",
+          finishedAt: new Date().toISOString(),
+          ...(fetched.empty ? { error: "no vendor returned any items" } : {}),
+        });
+        return;
+      }
+
       if (fetched.empty) {
         // Nothing usable came back. Stop here rather than paying a model to
         // synthesise a persona out of an empty object — an intake record built
@@ -173,6 +192,7 @@ export function raceRouter(): Router {
 
       await saveRun({
         ...afterFetch,
+        summary,
         status: out.intake ? "completed" : "failed",
         finishedAt: new Date().toISOString(),
         usage: out.usage,
@@ -203,6 +223,22 @@ export function raceRouter(): Router {
     const run = await getRun(req.params.id);
     if (!run) return res.status(404).json({ error: "no such run" });
     res.json(run);
+  });
+
+  // Look a person up by the address the operator typed, which is how every
+  // screen in the app refers to them.
+  r.get("/by-email/:email", async (req, res) => {
+    const address = decodeURIComponent(req.params.email).trim().toLowerCase();
+    const map = await subjectIndex();
+    const subjectId = map.byEmail[address];
+    if (!subjectId) return res.status(404).json({ error: "no run for that address yet" });
+
+    const hash = hashEmail(address);
+    const index = (await listRuns(500)) as any[];
+    const latest = index.find((r) => r.emailHash === hash);
+    if (!latest) return res.json({ subjectId, email: address, run: null });
+
+    res.json({ subjectId, email: address, run: await getRun(latest.runId) });
   });
 
   r.get("/subjects", async (_req, res) => {

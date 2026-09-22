@@ -137,7 +137,8 @@ export interface RunRecord {
   usage?: unknown;
   steps: RunStep[];
   intake?: unknown;        // the guarded record the skill produced
-  raw?: unknown;           // only when RACE_KEEP_RAW=true, and scrubbed first
+  raw?: unknown;           // credentials scrubbed before disk, always
+  summary?: unknown;       // display-only view of the fetch (see summary.ts)
   error?: string;
 }
 
@@ -188,9 +189,14 @@ export function scrubCredentials(value: unknown): unknown {
 
 export async function saveRun(run: RunRecord): Promise<void> {
   ensureDirs();
+  // Raw payloads are kept by default now that the fetch IS the deliverable, but
+  // credentials never reach disk either way. dataBreach.results[] arrives with
+  // cleartext passwords and IP addresses in it; what survives is the shape —
+  // the field was there, and what class of data it held — which is what anyone
+  // debugging this actually needs.
   const toWrite: RunRecord = {
     ...run,
-    raw: process.env.RACE_KEEP_RAW === "true" ? scrubCredentials(run.raw) : undefined,
+    raw: process.env.RACE_KEEP_RAW === "false" ? undefined : scrubCredentials(run.raw),
   };
   await writeAtomic(path.join(RUNS_DIR, `${run.runId}.json`), JSON.stringify(toWrite, null, 2));
 

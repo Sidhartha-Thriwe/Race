@@ -18,6 +18,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { QualCampaign, QualFile } from './LeadQualification';
+import { RaceLiveRun } from './RaceLiveRun';
 
 interface CustomerInsightBuilderProps {
   selectedCampaign: QualCampaign | null;
@@ -415,6 +416,9 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
           </button>
         )}
       </div>
+
+      {/* Live engine — real vendor calls, separate from the simulated pass below. */}
+      {!isProcessing && <RaceLiveRun />}
 
       {isProcessing ? (
         /* Processing Loading Console */
