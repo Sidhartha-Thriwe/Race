@@ -15,3 +15,6 @@ _git_leftovers/
 COMMIT_RACE_BACKEND.txt
 
 .vitecheck2/
+
+.vitecheck3/
+.vitecheck4/

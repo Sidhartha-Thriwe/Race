@@ -30,6 +30,39 @@ import { extractViews, viewsToCsv } from "./extract.js";
 let warnedOpen = false;
 
 /**
+ * Wrap an async handler so a thrown error becomes a JSON response.
+ *
+ * Express 4 does not catch rejections from async handlers. Without this, a
+ * throw leaves the request unanswered, the SPA catch-all serves index.html, and
+ * the browser reports `Unexpected token '<'` — which says nothing about the
+ * actual failure. That is precisely what happened when race_targets was missing
+ * from firestore.rules: a one-line rules gap surfaced in the UI as a JSON parse
+ * error, which is about as unhelpful as an error can be.
+ *
+ * Every /api/race route goes through this. An API route must fail as JSON.
+ */
+type Handler = (req: Request, res: Response) => Promise<unknown> | unknown;
+const json = (fn: Handler) => async (req: Request, res: Response) => {
+  try {
+    await fn(req, res);
+  } catch (e: any) {
+    const message = `${e?.name ?? "Error"}: ${e?.message ?? String(e)}`;
+    console.error("[race] route failed:", message);
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: message,
+        hint: /permission|denied/i.test(message)
+          ? "Firestore refused the operation — a collection used here is " +
+            "probably missing from firestore.rules."
+          : undefined,
+      });
+    }
+  }
+};
+
+
+
+/**
  * Derive the five views on read when a stored run predates extract.ts.
  *
  * The raw payload was always kept, so nothing needs re-fetching or migrating —
@@ -82,7 +115,7 @@ export function raceRouter(): Router {
   const r = Router();
   r.use(requireToken);
 
-  r.get("/status", async (_req, res) => {
+  r.get("/status", json(async (_req, res) => {
     const skill = skillConfigured();
     res.json({
       skill: {
@@ -109,9 +142,9 @@ export function raceRouter(): Router {
         : "Firestore is not reachable, so records are on the container filesystem — " +
           "which on Cloud Run is wiped by a redeploy or scale-to-zero. Export before it matters.",
     });
-  });
+  }));
 
-  r.post("/run", async (req, res) => {
+  r.post("/run", json(async (req, res) => {
     const {
       email, useCase = "customer_insight", sector, ticketBand,
       vendors, consentBasis, normalise = false,
@@ -245,23 +278,23 @@ export function raceRouter(): Router {
         }],
       });
     }
-  });
+  }));
 
-  r.get("/runs", async (req, res) => {
+  r.get("/runs", json(async (req, res) => {
     const limit = Math.min(Number(req.query.limit ?? 50) || 50, 500);
     res.json({ runs: await listRuns(limit) });
-  });
+  }));
 
-  r.get("/runs/:id", async (req, res) => {
+  r.get("/runs/:id", json(async (req, res) => {
     const run = await getRun(req.params.id);
     if (!run) return res.status(404).json({ error: "no such run" });
     res.json(withViews(run));
-  });
+  }));
 
   // The five views as CSV, matching the vendor's own export file names.
   //   /runs/<id>/csv                -> lists what is available
   //   /runs/<id>/csv/rich_data.csv  -> that file
-  r.get("/runs/:id/csv/:file?", async (req, res) => {
+  r.get("/runs/:id/csv/:file?", json(async (req, res) => {
     const run = await getRun(req.params.id);
     if (!run) return res.status(404).json({ error: "no such run" });
     const files = viewsToCsv(withViews(run).views as any);
@@ -274,11 +307,11 @@ export function raceRouter(): Router {
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${req.params.file}"`);
     res.send(body);
-  });
+  }));
 
   // Look a person up by the address the operator typed, which is how every
   // screen in the app refers to them.
-  r.get("/by-email/:email", async (req, res) => {
+  r.get("/by-email/:email", json(async (req, res) => {
     const address = decodeURIComponent(req.params.email).trim().toLowerCase();
     const map = await subjectIndex();
     const subjectId = map.byEmail[address];
@@ -290,11 +323,11 @@ export function raceRouter(): Router {
     if (!latest) return res.json({ subjectId, email: address, run: null });
 
     res.json({ subjectId, email: address, run: await getRun(latest.runId) });
-  });
+  }));
 
   // Everything, as one file. Insurance against the filesystem fallback, and the
   // quickest way to hand a run to someone who is not looking at this app.
-  r.get("/export", async (_req, res) => {
+  r.get("/export", json(async (_req, res) => {
     const index = await listRuns(500);
     const runs = [];
     for (const row of index) {
@@ -309,13 +342,13 @@ export function raceRouter(): Router {
       subjects: await subjectIndex(),
       runs,
     });
-  });
+  }));
 
   // ------------------------------------------------------------- step 2
   // Plan only. Reads what step 1 stored, decides what COULD be scraped, and
   // writes it down. No Apify call, no vendor call, nothing spent — so it is
   // safe to re-run, and the plan can be argued with before it costs anything.
-  r.post("/subjects/:subjectId/targets", async (req, res) => {
+  r.post("/subjects/:subjectId/targets", json(async (req, res) => {
     const subjectId = String(req.params.subjectId).trim();
     if (!/^P-\d{2,}$/.test(subjectId)) {
       return res.status(400).json({ error: "subjectId must look like P-20" });
@@ -348,17 +381,17 @@ export function raceRouter(): Router {
 
     await putTargets(subjectId, plan);
     res.json(plan);
-  });
+  }));
 
-  r.get("/subjects/:subjectId/targets", async (req, res) => {
+  r.get("/subjects/:subjectId/targets", json(async (req, res) => {
     const plan = await fetchTargets(String(req.params.subjectId).trim());
     if (!plan) return res.status(404).json({ error: "no plan yet — run step 2" });
     res.json(plan);
-  });
+  }));
 
-  r.get("/subjects", async (_req, res) => {
+  r.get("/subjects", json(async (_req, res) => {
     res.json(await subjectIndex());
-  });
+  }));
 
   return r;
 }

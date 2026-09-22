@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Loader2, AlertTriangle, Crosshair, Download, Info } from 'lucide-react';
+import { raceFetch } from './raceApi';
 
 /**
  * Step 2 — the scrape-target plan.
@@ -40,24 +41,18 @@ export const RaceTargets: React.FC<{ subjectId: string; enabled: boolean }> = ({
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'ready' | 'blocked' | 'noRoute' | 'identifiers'>('ready');
 
-  const headers = (): Record<string, string> => {
-    const token = sessionStorage.getItem('race_token') ?? '';
-    return { 'Content-Type': 'application/json', ...(token ? { 'x-race-token': token } : {}) };
-  };
+  const [hint, setHint] = useState<string | null>(null);
 
   const run = async () => {
-    setBusy(true); setError(null); setPlan(null);
-    try {
-      const res = await fetch(`/api/race/subjects/${subjectId}/targets`,
-                              { method: 'POST', headers: headers() });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? `HTTP ${res.status}`); return; }
-      setPlan(data); setTab('ready');
-    } catch (e: any) {
-      setError(e?.message ?? 'request failed');
-    } finally {
-      setBusy(false);
+    setBusy(true); setError(null); setHint(null); setPlan(null);
+    const res = await raceFetch<Plan>(`/api/race/subjects/${subjectId}/targets`,
+                                      { method: 'POST' });
+    if (res.ok && res.data) {
+      setPlan(res.data); setTab('ready');
+    } else {
+      setError(res.error ?? 'request failed'); setHint(res.hint ?? null);
     }
+    setBusy(false);
   };
 
   const TABS = plan ? ([
@@ -89,7 +84,10 @@ export const RaceTargets: React.FC<{ subjectId: string; enabled: boolean }> = ({
       {error && (
         <div className="flex items-start gap-2 px-3 py-2 bg-red-50 border border-red-100 rounded-lg">
           <AlertTriangle size={12} className="text-red-500 mt-0.5 shrink-0" />
-          <span className="text-[11px] text-red-700 font-medium">{error}</span>
+          <div>
+            <div className="text-[11px] text-red-700 font-medium">{error}</div>
+            {hint && <div className="text-[10px] text-red-600 mt-0.5">{hint}</div>}
+          </div>
         </div>
       )}
 
