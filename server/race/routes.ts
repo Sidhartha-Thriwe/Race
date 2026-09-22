@@ -20,7 +20,8 @@ import {
   resolveSubjectId, subjectIndex, ledgerSnapshot, newRunId, hashEmail,
   saveRun, listRuns, getRun, dataDir, type RunRecord,
 } from "./store.js";
-import { runSkillOne, skillConfigured } from "./claude.js";
+import { normaliseWithSkill, skillConfigured } from "./claude.js";
+import { fetchStage } from "./pipeline.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -136,20 +137,47 @@ export function raceRouter(): Router {
     res.status(202).json({ runId, subjectId, status: "running" });
 
     try {
-      const out = await runSkillOne({
-        email: address, subjectId, useCase, sector, ticketBand,
-        vendors: vendors as VendorName[] | undefined,
+      // Stage 1 — the backend fetches. No model involved in deciding or doing it.
+      const fetched = await fetchStage({
+        email: address, useCase, ticketBand,
+        explicitVendors: vendors as VendorName[] | undefined,
       });
-      await saveRun({
+
+      const afterFetch = {
         ...record,
+        vendorsCalled: fetched.vendorsCalled,
+        costINR: fetched.costINR,
+        steps: [...record.steps, ...fetched.steps],
+        raw: fetched.raw,
+      };
+
+      if (fetched.empty) {
+        // Nothing usable came back. Stop here rather than paying a model to
+        // synthesise a persona out of an empty object — an intake record built
+        // on no evidence is worse than no record, because it looks like one.
+        await saveRun({
+          ...afterFetch,
+          status: "failed",
+          finishedAt: new Date().toISOString(),
+          error: "no vendor returned any items",
+        });
+        return;
+      }
+
+      // Stage 2 — normalise through the skill, where the guards and the tests are.
+      const out = await normaliseWithSkill({
+        subjectId, email: address, useCase, sector, ticketBand,
+        raw: fetched.raw,
+        vendorsAttempted: fetched.vendorsCalled,
+      });
+
+      await saveRun({
+        ...afterFetch,
         status: out.intake ? "completed" : "failed",
         finishedAt: new Date().toISOString(),
-        vendorsCalled: out.vendorsCalled,
-        costINR: out.costINR,
         usage: out.usage,
-        steps: [...record.steps, ...out.steps],
+        steps: [...afterFetch.steps, ...out.steps],
         intake: out.intake,
-        raw: out.raw,
         ...(out.intake ? {} : { error: "no intake record in the final reply" }),
       });
     } catch (e: any) {

@@ -1,25 +1,36 @@
 /**
- * The agent loop that runs skill 1.
+ * Stage 2 of the pipeline: normalise the payloads into an intake record.
  *
- * One Messages API request carries both `container.skills` (which requires the
- * code execution tool) and our own `race_fetch_vendor` client tool. Claude
- * interleaves them: call our tool for the network the sandbox does not have,
- * then run resolve.py in the sandbox on what came back.
+ * The backend has already fetched (see pipeline.ts). This hands the raw vendor
+ * payloads to Claude running skill 1, which writes them into its sandbox as
+ * raw.json and runs the skill's own resolve.py over them — guards, vendor
+ * normalisers, merge, dormancy detection, all of it.
  *
- * That interleaving is undocumented by Anthropic, so it was verified directly
- * before anything was built on it — see
- * RACE-Engine-Skills/integration/verify_api_architecture.py, which passed on
- * 2026-09-22. If a future SDK breaks it, that script is the canary.
+ * Why a model is in this loop at all, when resolve.py is deterministic: it is
+ * the only way to run that one authored copy of the method without a Python
+ * runtime in this container. The scripts stay in the skill, tested once, usable
+ * from claude.ai and Desktop and here. The alternative — porting ~1,200 lines
+ * of guards and normalisers to TypeScript — puts the method in two places and
+ * only one of them has the 82 tests.
+ *
+ * Two costs of this choice, both real and both worth stating out loud:
+ *
+ *   The raw payloads pass through the model's context. That includes
+ *   dataBreach.results[], which carries cleartext credentials, BEFORE the
+ *   guards have removed anything. Skills are not covered by Zero Data
+ *   Retention. This belongs in the Legal conversation alongside the vendor
+ *   contracts, not in a footnote.
+ *
+ *   It costs tokens to move bytes a script could have read off disk.
+ *
+ * Both disappear if this container ever gets a Python runtime: run resolve.py
+ * here, and only the cleaned intake record ever leaves Thriwe's infrastructure.
+ * The scripts do not change either way — that is the point of keeping the
+ * logic in the skill rather than in any one host.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import {
-  RACE_FETCH_VENDOR_TOOL,
-  raceFetchVendor,
-  type FetchVendorInput,
-  type VendorName,
-} from "./vendors.js";
-import { capReached, recordSpend, type RunRecord, type RunStep } from "./store.js";
+import type { RunStep } from "./store.js";
 
 const MODEL = process.env.RACE_MODEL ?? "claude-opus-5";
 
@@ -31,69 +42,23 @@ const MODEL = process.env.RACE_MODEL ?? "claude-opus-5";
  */
 const SKILL_ID = process.env.RACE_SKILL_ID ?? "";
 const SKILL_VERSION = process.env.RACE_SKILL_VERSION ?? "";
+const MAX_TURNS = Number(process.env.RACE_MAX_TURNS ?? 16);
 
-const MAX_TURNS = Number(process.env.RACE_MAX_TURNS ?? 24);
-
-export interface RunRequest {
-  email: string;
+export interface NormaliseInput {
   subjectId: string;
+  email: string;
   useCase: string;
   sector?: string;
   ticketBand?: string;
-  vendors?: VendorName[]; // optional override; otherwise the skill chooses
+  raw: Record<string, unknown>;
+  vendorsAttempted: { vendor: string; ok: boolean; error?: string | null }[];
 }
 
-export interface RunOutcome {
+export interface NormaliseResult {
   intake: unknown | null;
   transcriptTail: string;
-  vendorsCalled: RunRecord["vendorsCalled"];
-  costINR: number;
-  raw: Record<string, unknown>;
   usage: unknown;
   steps: RunStep[];
-}
-
-function step(steps: RunStep[], level: RunStep["level"], msg: string, detail?: unknown) {
-  steps.push({ t: new Date().toISOString(), level, msg, detail });
-}
-
-function buildPrompt(req: RunRequest): string {
-  const lines = [
-    `Run identity resolution for ${req.email}.`,
-    `Subject id: ${req.subjectId} — use this exact id in the intake record; do not mint a new one.`,
-    `Use case: ${req.useCase}.`,
-  ];
-  if (req.sector) lines.push(`Sector: ${req.sector}.`);
-  if (req.ticketBand) lines.push(`Ticket band: ${req.ticketBand}.`);
-  if (req.vendors?.length) {
-    lines.push(
-      `Vendor set is fixed by the operator for this run: ${req.vendors.join(", ")}. ` +
-      `Call exactly these and no others, even if the routing table would choose differently.`,
-    );
-  }
-  lines.push(
-    "",
-    "Use the race_fetch_vendor tool for every vendor call — you have no network in the sandbox.",
-    "Then run the skill's resolve.py on the payloads to produce the intake record.",
-    "",
-    "Finish your reply with the complete intake record in a single ```json fenced block,",
-    "and nothing after it. If a vendor refused or returned nothing, say so above the block",
-    "and still emit the record with the gap recorded rather than omitting the block.",
-  );
-  return lines.join("\n");
-}
-
-/** Pull the last fenced json block out of the final text. */
-function extractIntake(text: string): unknown | null {
-  const blocks = [...text.matchAll(/```json\s*([\s\S]*?)```/g)];
-  for (let i = blocks.length - 1; i >= 0; i--) {
-    try {
-      return JSON.parse(blocks[i][1]);
-    } catch {
-      /* try the one before it */
-    }
-  }
-  return null;
 }
 
 export function skillConfigured(): { ok: boolean; reason?: string } {
@@ -110,11 +75,52 @@ export function skillConfigured(): { ok: boolean; reason?: string } {
   return { ok: true };
 }
 
-export async function runSkillOne(req: RunRequest): Promise<RunOutcome> {
+function buildPrompt(input: NormaliseInput): string {
+  const gaps = input.vendorsAttempted.filter((v) => !v.ok);
+  return [
+    `Normalise the attached vendor payloads into an intake record for ${input.subjectId} (${input.email}).`,
+    `Use case: ${input.useCase}.`,
+    input.sector ? `Sector: ${input.sector}.` : "",
+    input.ticketBand ? `Ticket band: ${input.ticketBand}.` : "",
+    "",
+    "The host has already fetched — do NOT attempt any network call, and do not",
+    "ask for more vendors. The payloads below are everything there is.",
+    gaps.length
+      ? `Vendors that did not answer, to be recorded as gaps: ${gaps
+          .map((g) => `${g.vendor} (${g.error})`)
+          .join("; ")}.`
+      : "Every selected vendor answered.",
+    "",
+    "Write the JSON below to raw.json in the sandbox, then run the skill's",
+    "resolve.py over it. Use the subject id exactly as given; do not mint a new one.",
+    "",
+    "```json",
+    JSON.stringify(input.raw),
+    "```",
+    "",
+    "Finish with the complete intake record in a single ```json fenced block and",
+    "nothing after it.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function extractIntake(text: string): unknown | null {
+  const blocks = [...text.matchAll(/```json\s*([\s\S]*?)```/g)];
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    try {
+      return JSON.parse(blocks[i][1]);
+    } catch {
+      /* try the block before it */
+    }
+  }
+  return null;
+}
+
+export async function normaliseWithSkill(input: NormaliseInput): Promise<NormaliseResult> {
   const steps: RunStep[] = [];
-  const vendorsCalled: RunOutcome["vendorsCalled"] = [];
-  const raw: Record<string, unknown> = {};
-  let costINR = 0;
+  const note = (level: RunStep["level"], msg: string, detail?: unknown) =>
+    steps.push({ t: new Date().toISOString(), level, msg, detail });
 
   const client = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
@@ -123,36 +129,29 @@ export async function runSkillOne(req: RunRequest): Promise<RunOutcome> {
       : {}),
   });
 
-  const tools: any[] = [
-    { type: "code_execution_20250825", name: "code_execution" },
-    RACE_FETCH_VENDOR_TOOL,
-  ];
-
+  const tools: any[] = [{ type: "code_execution_20250825", name: "code_execution" }];
   let container: any = {
     skills: [{ type: "custom", skill_id: SKILL_ID, version: SKILL_VERSION }],
   };
 
-  const messages: any[] = [{ role: "user", content: buildPrompt(req) }];
+  const messages: any[] = [{ role: "user", content: buildPrompt(input) }];
   let usage: unknown = null;
   let finalText = "";
 
-  step(steps, "info", `Starting run for ${req.subjectId}`, {
-    model: MODEL, skillId: SKILL_ID, skillVersion: SKILL_VERSION, useCase: req.useCase,
+  note("info", "Normalising with skill 1", {
+    skillId: SKILL_ID, skillVersion: SKILL_VERSION, model: MODEL,
+    payloadBytes: JSON.stringify(input.raw).length,
   });
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const resp: any = await client.messages.create({
-      model: MODEL,
-      max_tokens: 8192,
-      tools,
-      messages,
-      container,
+      model: MODEL, max_tokens: 8192, tools, messages, container,
     } as any);
 
     usage = resp.usage ?? usage;
 
-    // Keep the same container across turns so the sandbox keeps its state —
-    // raw.json written on one turn has to still be there on the next.
+    // Reuse the container so the sandbox keeps its state — raw.json written on
+    // one turn has to still be there on the next.
     if (resp.container?.id) {
       container = {
         id: resp.container.id,
@@ -160,82 +159,27 @@ export async function runSkillOne(req: RunRequest): Promise<RunOutcome> {
       };
     }
 
-    const toolResults: any[] = [];
     let turnText = "";
-
     for (const block of resp.content ?? []) {
-      if (block.type === "text") {
-        turnText += block.text;
-      } else if (block.type === "tool_use" && block.name === RACE_FETCH_VENDOR_TOOL.name) {
-        const input = block.input as FetchVendorInput;
-        step(steps, "info", `race_fetch_vendor → ${input.vendor}`, { query_type: input.query_type ?? "email" });
-
-        const result = await raceFetchVendor(input, { capReached, recordSpend });
-
-        vendorsCalled.push({
-          vendor: input.vendor,
-          ok: result.ok,
-          itemCount: result.itemCount,
-          costINR: result.costINR,
-          error: result.error,
-        });
-        if (result.ok) {
-          costINR += result.costINR ?? 0;
-          raw[input.vendor] = result.payload;
-          step(steps, "info", `${input.vendor} returned ${result.itemCount} item(s)`, {
-            status: result.status, creditBalanceAfter: result.creditBalanceAfter,
-          });
-          if (result.itemCount === 0) {
-            // A 200 with nothing in it is the failure that looks like success.
-            step(steps, "warn", `${input.vendor} returned 200 with zero items`, {
-              note: "empty result, no accounts, and a mistyped address all look identical here",
-            });
-          }
-        } else {
-          step(steps, "warn", `${input.vendor} did not answer: ${result.error}`);
-        }
-
-        toolResults.push({
-          type: "tool_result",
-          tool_use_id: block.id,
-          content: JSON.stringify(result),
-        });
-      } else if (typeof block.type === "string" && block.type.includes("code_execution")) {
-        step(steps, "info", `sandbox: ${block.type}`);
+      if (block.type === "text") turnText += block.text;
+      else if (typeof block.type === "string" && block.type.includes("code_execution")) {
+        note("info", `sandbox: ${block.type}`);
       }
     }
-
     if (turnText.trim()) finalText = turnText;
+
     messages.push({ role: "assistant", content: resp.content });
 
-    if (resp.stop_reason === "tool_use") {
-      if (toolResults.length) {
-        messages.push({ role: "user", content: toolResults });
-        continue;
-      }
-      // Code execution is a server-side tool Anthropic runs itself; there is
-      // nothing for us to return, so just go round again.
-      continue;
-    }
+    // Only server-side tools are in play now, so there is never a tool_result
+    // for us to return — just go round again until it stops.
+    if (resp.stop_reason === "tool_use") continue;
     break;
   }
 
   const intake = extractIntake(finalText);
-  if (!intake) {
-    step(steps, "error", "No intake record found in the final reply", {
-      hint: "the run may have hit RACE_MAX_TURNS, or every vendor refused",
-    });
-  } else {
-    step(steps, "info", "Intake record parsed");
-  }
+  note(intake ? "info" : "error",
+       intake ? "Intake record parsed"
+              : "No intake record in the final reply (hit RACE_MAX_TURNS, or the skill errored)");
 
-  return {
-    intake,
-    transcriptTail: finalText.slice(-4000),
-    vendorsCalled,
-    costINR: Math.round(costINR * 100) / 100,
-    raw,
-    usage,
-    steps,
-  };
+  return { intake, transcriptTail: finalText.slice(-4000), usage, steps };
 }
