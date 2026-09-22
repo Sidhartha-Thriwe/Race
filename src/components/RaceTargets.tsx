@@ -37,14 +37,18 @@ export const RaceTargets: React.FC<{
   subjectId: string; enabled: boolean;
   /** A plan loaded alongside a stored subject, so step 2 shows without re-running. */
   initialPlan?: Plan | null;
-}> = ({ subjectId, enabled, initialPlan }) => {
+  /** Lets the parent unlock step 3 with the same plan this panel is showing. */
+  onPlan?: (plan: Plan | null) => void;
+}> = ({ subjectId, enabled, initialPlan, onPlan }) => {
   const [plan, setPlan] = useState<Plan | null>(initialPlan ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'ready' | 'blocked' | 'noRoute' | 'identifiers'>('ready');
 
   // A freshly loaded subject brings its stored plan with it.
-  useEffect(() => { setPlan(initialPlan ?? null); setError(null); }, [initialPlan, subjectId]);
+  useEffect(() => {
+    setPlan(initialPlan ?? null); setError(null); onPlan?.(initialPlan ?? null);
+  }, [initialPlan, subjectId]);
 
   const [hint, setHint] = useState<string | null>(null);
 
@@ -53,7 +57,7 @@ export const RaceTargets: React.FC<{
     const res = await raceFetch<Plan>(`/api/race/subjects/${subjectId}/targets`,
                                       { method: 'POST' });
     if (res.ok && res.data) {
-      setPlan(res.data); setTab('ready');
+      setPlan(res.data); setTab('ready'); onPlan?.(res.data);
     } else {
       setError(res.error ?? 'request failed'); setHint(res.hint ?? null);
     }

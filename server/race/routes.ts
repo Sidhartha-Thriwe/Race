@@ -21,7 +21,9 @@ import {
   hashEmail, saveRun, listRuns, getRun, dataDir, type RunRecord,
 } from "./store.js";
 import { normaliseWithSkill, skillConfigured } from "./claude.js";
-import { storeInfo, putTargets, fetchTargets } from "./db.js";
+import { storeInfo, putTargets, fetchTargets, putScrape, fetchScrape } from "./db.js";
+import { runScrape } from "./scrape.js";
+import { apifyConfigured } from "./apify.js";
 import { planTargets } from "./targets.js";
 import { fetchStage } from "./pipeline.js";
 import { summarise } from "./summary.js";
@@ -158,6 +160,7 @@ export function raceRouter(): Router {
         costINR: VENDORS[v].costINR,
         monthlyCap: VENDORS[v].monthlyCap,
       })),
+      apify: { configured: apifyConfigured() },
       osintCredits: await osintCredits(),
       ledger: await ledgerSnapshot(),
       storage: storeInfo(),
@@ -411,6 +414,38 @@ export function raceRouter(): Router {
     res.json({ ...plan, storedIn });
   }));
 
+  // ------------------------------------------------------------- step 3
+  // Runs the reviewed plan. This one spends: Apify bills per result row, so the
+  // cost is only known afterwards and is read back from the run, never guessed.
+  r.post("/subjects/:subjectId/scrape", json(async (req, res) => {
+    const subjectId = String(req.params.subjectId).trim();
+    if (!/^P-\d{2,}$/.test(subjectId)) {
+      return res.status(400).json({ error: "subjectId must look like P-20" });
+    }
+    if (!apifyConfigured()) {
+      return res.status(503).json({ error: "APIFY_TOKEN is not set" });
+    }
+
+    const plan = await fetchTargets(subjectId);
+    if (!plan) return res.status(409).json({ error: "no step 2 plan — run step 2 first" });
+    if (!plan.ready?.length) {
+      return res.status(409).json({ error: "the plan has no ready actors to run" });
+    }
+
+    const only: string[] = Array.isArray(req.body?.only) ? req.body.only : [];
+    const result = await runScrape({
+      subjectId, emailHash: plan.emailHash, email: plan.email, plan, only,
+    });
+    const storedIn = await putScrape(subjectId, result);
+    res.json({ ...result, storedIn });
+  }));
+
+  r.get("/subjects/:subjectId/scrape", json(async (req, res) => {
+    const scrape = await fetchScrape(String(req.params.subjectId).trim());
+    if (!scrape) return res.status(404).json({ error: "no scrape yet — run step 3" });
+    res.json(scrape);
+  }));
+
   r.get("/subjects/:subjectId/targets", json(async (req, res) => {
     const plan = await fetchTargets(String(req.params.subjectId).trim());
     if (!plan) return res.status(404).json({ error: "no plan yet — run step 2" });
@@ -439,6 +474,7 @@ export function raceRouter(): Router {
       subjectId, email,
       run: withViews(await getRun(row.runId)),
       plan: await fetchTargets(subjectId),
+      scrape: await fetchScrape(subjectId),
     });
   }));
 

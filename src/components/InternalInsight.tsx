@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useRaceRun, RaceRunPanel, StorageBadge, RunSpinner } from './RaceLiveRun';
 import { RaceTargets } from './RaceTargets';
+import { RaceScrape } from './RaceScrape';
 import { 
   ArrowLeft, 
   Users, 
@@ -68,6 +69,9 @@ export const InternalInsight: React.FC = () => {
   const { run, busy, error, hint, storage, subjects, estimateINR, spentThisMonth,
           fromStore, start, loadSubject } = useRaceRun();
   const [loadedPlan, setLoadedPlan] = useState<any>(null);
+  const [loadedScrape, setLoadedScrape] = useState<any>(null);
+  /** The plan currently on screen, whether just run or loaded from storage. */
+  const [activePlan, setActivePlan] = useState<any>(null);
   const isLive = selectedCapability === 'Customer Insight';
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(contactEmail.trim());
   const stored = subjects.find(
@@ -81,6 +85,8 @@ export const InternalInsight: React.FC = () => {
   const applyBundle = (b: any) => {
     if (!b) return;
     setLoadedPlan(b.plan ?? null);
+    setActivePlan(b.plan ?? null);
+    setLoadedScrape(b.scrape ?? null);
     if (b.email) setContactEmail(b.email);
     const r = b.run ?? {};
     if (r.sector && ['Automobile', 'Luxury Watch', 'Real Estate'].includes(r.sector)) {
@@ -357,7 +363,7 @@ export const InternalInsight: React.FC = () => {
                   disabled={isLive && (busy || !emailValid)}
                   onClick={() => {
                     if (!isLive) return; // still a scoping placeholder for the other two
-                    setLoadedPlan(null);
+                    setLoadedPlan(null); setActivePlan(null); setLoadedScrape(null);
                     start({ email: contactEmail, sector, ticketBand: ticketPrice,
                             useCase: 'customer_insight' });
                   }}
@@ -394,8 +400,31 @@ export const InternalInsight: React.FC = () => {
 
               {/* Step 2 — plan only. Enabled once step 1 has a subject id. */}
               {isLive && run?.subjectId && (
-                <RaceTargets subjectId={run.subjectId} enabled={run.status === 'completed'}
-                             initialPlan={loadedPlan} />
+                <>
+                  <RaceTargets subjectId={run.subjectId} enabled={run.status === 'completed'}
+                               initialPlan={loadedPlan} onPlan={setActivePlan} />
+
+                  {/* Step 3 — runs the reviewed plan. Spends. */}
+                  <RaceScrape
+                    subjectId={run.subjectId}
+                    ready={activePlan?.ready ?? []}
+                    enabled={Boolean(activePlan?.ready?.length)}
+                    initialScrape={loadedScrape}
+                    onComplete={setLoadedScrape}
+                  />
+
+                  {/* Step 4 — unlocked by step 3, not built yet. Shown disabled so
+                      the sequence is legible rather than implied. */}
+                  <button
+                    type="button" disabled
+                    className="w-full py-2.5 rounded-lg font-bold text-xs bg-neutral-100 text-neutral-400 border border-neutral-200 cursor-not-allowed"
+                    id="race_step4_btn"
+                  >
+                    {loadedScrape
+                      ? 'Build Persona — Step 4 (not built yet)'
+                      : 'Build Persona — Step 4 (complete step 3 first)'}
+                  </button>
+                </>
               )}
 
               <div className="flex items-center justify-between text-[10.5px] text-neutral-400 font-medium px-1">

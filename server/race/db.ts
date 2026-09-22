@@ -50,6 +50,7 @@ let initialised = false;
 
 const RUNS_COLLECTION = "race_runs";
 const TARGETS_COLLECTION = "race_targets";
+const SCRAPES_COLLECTION = "race_scrapes";
 
 function appletConfig(): {
   projectId?: string;
@@ -133,6 +134,7 @@ export function storeInfo(): { backend: Backend; error: string | null } {
 function ensureDirs() {
   fs.mkdirSync(RUNS_DIR, { recursive: true });
   fs.mkdirSync(path.join(DATA_DIR, "targets"), { recursive: true });
+  fs.mkdirSync(path.join(DATA_DIR, "scrapes"), { recursive: true });
 }
 
 async function writeAtomic(file: string, data: string) {
@@ -292,6 +294,56 @@ export async function fetchTargets(subjectId: string): Promise<any | null> {
     }
   }
   return readJsonFile(path.join(DATA_DIR, "targets", `${subjectId}.json`), null);
+}
+
+/**
+ * Step 3 results, split one document per actor.
+ *
+ * A Firestore document caps at 1 MiB, and a prolific reviewer's Google Maps
+ * haul can pass that on its own. One summary document plus one document per
+ * platform keeps every write comfortably inside the limit, and means a single
+ * oversized actor cannot take the whole record down with it.
+ */
+export async function putScrape(subjectId: string, result: any): Promise<Backend> {
+  const { data, ...summary } = result;
+  const platforms = Object.keys(data ?? {});
+
+  if (backend === "firestore" && firestore) {
+    try {
+      await setDoc(doc(firestore, SCRAPES_COLLECTION, subjectId),
+                   JSON.parse(JSON.stringify({ ...summary, platforms })));
+      for (const platform of platforms) {
+        await setDoc(doc(firestore, SCRAPES_COLLECTION, `${subjectId}__${platform}`),
+                     JSON.parse(JSON.stringify({ subjectId, platform, items: data[platform] })));
+      }
+      return "firestore";
+    } catch (err: any) {
+      console.warn(`[race] Firestore putScrape error: ${err?.message}; falling back to filesystem`);
+    }
+  }
+  await writeAtomic(path.join(DATA_DIR, "scrapes", `${subjectId}.json`),
+                    JSON.stringify(result, null, 2));
+  return "filesystem";
+}
+
+export async function fetchScrape(subjectId: string): Promise<any | null> {
+  if (backend === "firestore" && firestore) {
+    try {
+      const snap = await getDoc(doc(firestore, SCRAPES_COLLECTION, subjectId));
+      if (!snap.exists()) return null;
+      const summary: any = snap.data();
+      const data: Record<string, unknown[]> = {};
+      for (const platform of summary.platforms ?? []) {
+        const part = await getDoc(
+          doc(firestore, SCRAPES_COLLECTION, `${subjectId}__${platform}`));
+        data[platform] = part.exists() ? ((part.data() as any).items ?? []) : [];
+      }
+      return { ...summary, data };
+    } catch (err: any) {
+      console.warn(`[race] Firestore fetchScrape error: ${err?.message}; falling back to filesystem`);
+    }
+  }
+  return readJsonFile(path.join(DATA_DIR, "scrapes", `${subjectId}.json`), null);
 }
 
 export function dataDir(): string {
