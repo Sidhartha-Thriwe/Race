@@ -417,9 +417,6 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
         )}
       </div>
 
-      {/* Live engine — real vendor calls, separate from the simulated pass below. */}
-      {!isProcessing && <RaceLiveRun />}
-
       {isProcessing ? (
         /* Processing Loading Console */
         <div className="bg-white border border-neutral-200 rounded-xl p-8 shadow-xs text-center space-y-6 max-w-2xl mx-auto py-16" id="processing_console">
@@ -794,6 +791,9 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                       I confirm this list was collected with consent covering behavioral and psychological profiling, not only contact use.
                     </label>
                   </div>
+
+                  {/* Live engine — one real subject, above the simulated bulk pass. */}
+                  <RaceLiveRun useCase="customer_insight" ticketBand={`₹${Math.round(ticketSizeMax / 100000)}L`} />
 
                   {/* RUN BUTTON */}
                   <div className="space-y-1.5">

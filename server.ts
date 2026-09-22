@@ -3,6 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import "dotenv/config";
 import { raceRouter } from "./server/race/routes.js";
+import { initStore } from "./server/race/db.js";
 
 async function startServer() {
   const app = express();
@@ -16,6 +17,9 @@ async function startServer() {
   });
 
   // RACE engine — skill 1 (identity resolution) and its run records.
+  // Resolve the storage backend once, at boot, so the first run of a demo is
+  // not also the first time we find out whether Firestore is reachable.
+  await initStore();
   app.use("/api/race", raceRouter());
 
   // Vite middleware for development vs static production serving

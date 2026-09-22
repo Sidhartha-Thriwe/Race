@@ -21,6 +21,7 @@ import {
   saveRun, listRuns, getRun, dataDir, type RunRecord,
 } from "./store.js";
 import { normaliseWithSkill, skillConfigured } from "./claude.js";
+import { storeInfo } from "./db.js";
 import { fetchStage } from "./pipeline.js";
 import { summarise } from "./summary.js";
 
@@ -73,11 +74,13 @@ export function raceRouter(): Router {
       })),
       osintCredits: await osintCredits(),
       ledger: await ledgerSnapshot(),
+      storage: storeInfo(),
       dataDir: dataDir(),
       keepRaw: process.env.RACE_KEEP_RAW === "true",
-      note: "Run records live on the container filesystem. On Cloud Run that is " +
-            "ephemeral — set RACE_DATA_DIR to a mounted volume before treating " +
-            "this as an audit trail.",
+      note: storeInfo().backend === "firestore"
+        ? "Run records are in Firestore and survive redeploys."
+        : "Firestore is not reachable, so records are on the container filesystem — " +
+          "which on Cloud Run is wiped by a redeploy or scale-to-zero. Export before it matters.",
     });
   });
 
@@ -239,6 +242,25 @@ export function raceRouter(): Router {
     if (!latest) return res.json({ subjectId, email: address, run: null });
 
     res.json({ subjectId, email: address, run: await getRun(latest.runId) });
+  });
+
+  // Everything, as one file. Insurance against the filesystem fallback, and the
+  // quickest way to hand a run to someone who is not looking at this app.
+  r.get("/export", async (_req, res) => {
+    const index = await listRuns(500);
+    const runs = [];
+    for (const row of index) {
+      const full = await getRun(row.runId);
+      if (full) runs.push(full);
+    }
+    res.setHeader("Content-Disposition",
+      `attachment; filename="race-export-${new Date().toISOString().slice(0, 10)}.json"`);
+    res.json({
+      exportedAt: new Date().toISOString(),
+      storage: storeInfo(),
+      subjects: await subjectIndex(),
+      runs,
+    });
   });
 
   r.get("/subjects", async (_req, res) => {

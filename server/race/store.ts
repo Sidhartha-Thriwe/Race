@@ -17,46 +17,17 @@
  * before any of this counts as an audit trail.
  */
 
-import fs from "fs";
-import fsp from "fs/promises";
-import path from "path";
 import crypto from "crypto";
-
-const DATA_DIR = process.env.RACE_DATA_DIR
-  ? path.resolve(process.env.RACE_DATA_DIR)
-  : path.join(process.cwd(), ".race-data");
-
-const RUNS_DIR = path.join(DATA_DIR, "runs");
-const RUN_INDEX = path.join(DATA_DIR, "runs.jsonl");
-const SUBJECTS = path.join(DATA_DIR, "subjects.json");
-const LEDGER = path.join(DATA_DIR, "ledger.json");
+import {
+  loadSubjects, saveSubjects, loadLedger, saveLedger,
+  putRun, fetchRun, appendIndex, queryRuns, dataDir as storeDataDir,
+  type SubjectMap,
+} from "./db.js";
 
 /** Subject ids P-01..P-19 belong to the existing personas. New subjects start at P-20. */
 const RESERVED_THROUGH = 19;
 
-function ensureDirs() {
-  fs.mkdirSync(RUNS_DIR, { recursive: true });
-}
-
-/** Write via a temp file + rename so a crash mid-write cannot leave a half file. */
-async function writeAtomic(file: string, data: string) {
-  ensureDirs();
-  const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-  await fsp.writeFile(tmp, data, "utf8");
-  await fsp.rename(tmp, file);
-}
-
-async function readJson<T>(file: string, fallback: T): Promise<T> {
-  try {
-    return JSON.parse(await fsp.readFile(file, "utf8")) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 /* ------------------------------------------------------------------ subjects */
-
-type SubjectMap = { byEmail: Record<string, string>; nextOrdinal: number };
 
 /**
  * One stable id per person. Case-insensitive, because Sid@x.com and sid@x.com
@@ -65,21 +36,18 @@ type SubjectMap = { byEmail: Record<string, string>; nextOrdinal: number };
  */
 export async function resolveSubjectId(email: string): Promise<string> {
   const key = email.trim().toLowerCase();
-  const map = await readJson<SubjectMap>(SUBJECTS, {
-    byEmail: {},
-    nextOrdinal: RESERVED_THROUGH + 1,
-  });
+  const map = await loadSubjects({ byEmail: {}, nextOrdinal: RESERVED_THROUGH + 1 });
   if (map.byEmail[key]) return map.byEmail[key];
 
   const code = `P-${String(map.nextOrdinal).padStart(2, "0")}`;
   map.byEmail[key] = code;
   map.nextOrdinal += 1;
-  await writeAtomic(SUBJECTS, JSON.stringify(map, null, 2));
+  await saveSubjects(map);
   return code;
 }
 
 export async function subjectIndex(): Promise<SubjectMap> {
-  return readJson<SubjectMap>(SUBJECTS, { byEmail: {}, nextOrdinal: RESERVED_THROUGH + 1 });
+  return loadSubjects({ byEmail: {}, nextOrdinal: RESERVED_THROUGH + 1 });
 }
 
 /* -------------------------------------------------------------------- ledger */
@@ -90,23 +58,23 @@ const monthKey = (vendor: string) =>
   `${new Date().toISOString().slice(0, 7)}:${vendor}`;
 
 export async function capReached(vendor: string, cap: number): Promise<boolean> {
-  const ledger = await readJson<Ledger>(LEDGER, {});
+  const ledger = await loadLedger<Ledger>({});
   return (ledger[monthKey(vendor)]?.calls ?? 0) >= cap;
 }
 
 export async function recordSpend(vendor: string, costINR: number): Promise<void> {
-  const ledger = await readJson<Ledger>(LEDGER, {});
+  const ledger = await loadLedger<Ledger>({});
   const k = monthKey(vendor);
   const cur = ledger[k] ?? { calls: 0, spendINR: 0 };
   ledger[k] = {
     calls: cur.calls + 1,
     spendINR: Math.round((cur.spendINR + costINR) * 100) / 100,
   };
-  await writeAtomic(LEDGER, JSON.stringify(ledger, null, 2));
+  await saveLedger(ledger);
 }
 
 export async function ledgerSnapshot(): Promise<Ledger> {
-  return readJson<Ledger>(LEDGER, {});
+  return loadLedger<Ledger>({});
 }
 
 /* ---------------------------------------------------------------------- runs */
@@ -188,7 +156,6 @@ export function scrubCredentials(value: unknown): unknown {
 }
 
 export async function saveRun(run: RunRecord): Promise<void> {
-  ensureDirs();
   // Raw payloads are kept by default now that the fetch IS the deliverable, but
   // credentials never reach disk either way. dataBreach.results[] arrives with
   // cleartext passwords and IP addresses in it; what survives is the shape —
@@ -198,40 +165,29 @@ export async function saveRun(run: RunRecord): Promise<void> {
     ...run,
     raw: process.env.RACE_KEEP_RAW === "false" ? undefined : scrubCredentials(run.raw),
   };
-  await writeAtomic(path.join(RUNS_DIR, `${run.runId}.json`), JSON.stringify(toWrite, null, 2));
+  await putRun(run.runId, toWrite);
 
   if (run.status !== "running") {
     const { runId, subjectId, emailHash, email, useCase, startedAt, finishedAt,
             status, costINR, vendorsCalled, skillVersion, error } = toWrite;
-    await fsp.appendFile(
-      RUN_INDEX,
-      JSON.stringify({
+    await appendIndex({
         runId, subjectId, emailHash, email, useCase, startedAt, finishedAt, status,
         costINR, skillVersion, error,
         vendors: vendorsCalled.map((v) => `${v.vendor}:${v.ok ? v.itemCount ?? 0 : "fail"}`),
-      }) + "\n",
-      "utf8",
-    );
+    });
   }
 }
 
-export async function listRuns(limit = 50): Promise<unknown[]> {
-  try {
-    const lines = (await fsp.readFile(RUN_INDEX, "utf8")).trim().split("\n").filter(Boolean);
-    return lines.slice(-limit).reverse().map((l) => {
-      try { return JSON.parse(l); } catch { return { malformed: l }; }
-    });
-  } catch {
-    return [];
-  }
+export async function listRuns(limit = 50): Promise<any[]> {
+  return queryRuns(limit);
 }
 
 export async function getRun(runId: string): Promise<RunRecord | null> {
   // The id comes off a URL, so refuse anything that is not the shape we mint.
   if (!/^run_[a-z0-9]+_[0-9a-f]{8}$/.test(runId)) return null;
-  return readJson<RunRecord | null>(path.join(RUNS_DIR, `${runId}.json`), null);
+  return fetchRun(runId);
 }
 
 export function dataDir(): string {
-  return DATA_DIR;
+  return storeDataDir();
 }
