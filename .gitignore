@@ -9,3 +9,7 @@ coverage/
 
 # RACE run records — personal data, never committed
 .race-data/
+
+_git_leftovers/
+.vitecheck/
+COMMIT_RACE_BACKEND.txt

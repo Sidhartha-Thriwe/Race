@@ -107,6 +107,7 @@ export interface RunRecord {
   intake?: unknown;        // the guarded record the skill produced
   raw?: unknown;           // credentials scrubbed before disk, always
   summary?: unknown;       // display-only view of the fetch (see summary.ts)
+  views?: unknown;         // the five export-shaped views (see extract.ts)
   error?: string;
 }
 

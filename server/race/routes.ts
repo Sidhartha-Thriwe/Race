@@ -24,8 +24,23 @@ import { normaliseWithSkill, skillConfigured } from "./claude.js";
 import { storeInfo } from "./db.js";
 import { fetchStage } from "./pipeline.js";
 import { summarise } from "./summary.js";
+import { extractViews, viewsToCsv } from "./extract.js";
 
 let warnedOpen = false;
+
+/**
+ * Derive the five views on read when a stored run predates extract.ts.
+ *
+ * The raw payload was always kept, so nothing needs re-fetching or migrating —
+ * an old run gains the views the moment it is read. Cheap enough to do inline,
+ * and it means there is no window where some runs answer differently from
+ * others.
+ */
+function withViews(run: any): any {
+  if (run?.views) return run;
+  if (!run?.raw) return run;
+  return { ...run, views: extractViews(run.raw), viewsDerivedOnRead: true };
+}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -171,12 +186,15 @@ export function raceRouter(): Router {
       };
 
       const summary = summarise(fetched.raw as Record<string, any>);
+      // The five views the vendor's own export produces, derived from the same
+      // payload. Stored so a reader never has to walk the raw blob.
+      const views = extractViews(fetched.raw as Record<string, any>);
 
       if (!normalise) {
         // Fast path: the fetch IS the deliverable. No model, no normalisation.
         await saveRun({
           ...afterFetch,
-          summary,
+          summary, views,
           status: fetched.empty ? "failed" : "completed",
           finishedAt: new Date().toISOString(),
           ...(fetched.empty ? { error: "no vendor returned any items" } : {}),
@@ -206,7 +224,7 @@ export function raceRouter(): Router {
 
       await saveRun({
         ...afterFetch,
-        summary,
+        summary, views,
         status: out.intake ? "completed" : "failed",
         finishedAt: new Date().toISOString(),
         usage: out.usage,
@@ -236,7 +254,25 @@ export function raceRouter(): Router {
   r.get("/runs/:id", async (req, res) => {
     const run = await getRun(req.params.id);
     if (!run) return res.status(404).json({ error: "no such run" });
-    res.json(run);
+    res.json(withViews(run));
+  });
+
+  // The five views as CSV, matching the vendor's own export file names.
+  //   /runs/<id>/csv                -> lists what is available
+  //   /runs/<id>/csv/rich_data.csv  -> that file
+  r.get("/runs/:id/csv/:file?", async (req, res) => {
+    const run = await getRun(req.params.id);
+    if (!run) return res.status(404).json({ error: "no such run" });
+    const files = viewsToCsv(withViews(run).views as any);
+
+    if (!req.params.file) return res.json({ files: Object.keys(files) });
+    const body = files[req.params.file];
+    if (body === undefined) {
+      return res.status(404).json({ error: "no such view", available: Object.keys(files) });
+    }
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${req.params.file}"`);
+    res.send(body);
   });
 
   // Look a person up by the address the operator typed, which is how every
@@ -262,7 +298,7 @@ export function raceRouter(): Router {
     const runs = [];
     for (const row of index) {
       const full = await getRun(row.runId);
-      if (full) runs.push(full);
+      if (full) runs.push(withViews(full));
     }
     res.setHeader("Content-Disposition",
       `attachment; filename="race-export-${new Date().toISOString().slice(0, 10)}.json"`);
