@@ -196,12 +196,13 @@ export async function deriveCategories(opts: {
 
   let resp: any;
   try {
-    resp = await client.messages.create({
+    const stream = client.messages.stream({
       model: MODEL,
       max_tokens: MAX_TOKENS,
       system: CATEGORIES_SYSTEM_PROMPT,
       messages: [{ role: "user", content: input }],
     });
+    resp = await stream.finalMessage();
   } catch (err: any) {
     const msg = err?.message ?? String(err);
     if (/anthropic-workspace-id|workspace/i.test(msg)) {
