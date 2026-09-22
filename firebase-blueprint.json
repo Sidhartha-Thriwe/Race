@@ -206,6 +206,26 @@
           "description": "Metadata identifier"
         }
       }
+    },
+    "RaceTarget": {
+      "title": "RACE Scrape Targets Plan",
+      "description": "Step 2 target planning record for scrape operations",
+      "type": "object",
+      "properties": {
+        "subjectId": {
+          "type": "string",
+          "description": "Target subject identifier"
+        },
+        "sourceRunId": {
+          "type": "string",
+          "description": "Step 1 run ID source"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when targets were planned"
+        }
+      },
+      "required": ["subjectId", "sourceRunId"]
     }
   },
   "firestore": {
@@ -228,6 +248,10 @@
     "/race_meta/{metaId}": {
       "schema": "RaceMeta",
       "description": "Metadata documents including subject mappings and spend ledger"
+    },
+    "/race_targets/{targetId}": {
+      "schema": "RaceTarget",
+      "description": "Planned scrape targets per subject"
     }
   }
 }

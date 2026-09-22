@@ -156,52 +156,76 @@ export type SubjectMap = { byEmail: Record<string, string>; nextOrdinal: number 
 
 export async function loadSubjects(seed: SubjectMap): Promise<SubjectMap> {
   if (backend === "firestore" && firestore) {
-    const snap = await getDoc(doc(firestore, "race_meta", "subjects"));
-    return snap.exists() ? (snap.data() as SubjectMap) : seed;
+    try {
+      const snap = await getDoc(doc(firestore, "race_meta", "subjects"));
+      return snap.exists() ? (snap.data() as SubjectMap) : seed;
+    } catch (err: any) {
+      console.warn(`[race] Firestore loadSubjects error: ${err?.message}; using filesystem`);
+    }
   }
   return readJsonFile(path.join(DATA_DIR, "subjects.json"), seed);
 }
 
 export async function saveSubjects(map: SubjectMap): Promise<void> {
   if (backend === "firestore" && firestore) {
-    await setDoc(doc(firestore, "race_meta", "subjects"), map);
-    return;
+    try {
+      await setDoc(doc(firestore, "race_meta", "subjects"), map);
+      return;
+    } catch (err: any) {
+      console.warn(`[race] Firestore saveSubjects error: ${err?.message}; falling back to filesystem`);
+    }
   }
   await writeAtomic(path.join(DATA_DIR, "subjects.json"), JSON.stringify(map, null, 2));
 }
 
 export async function loadLedger<T>(seed: T): Promise<T> {
   if (backend === "firestore" && firestore) {
-    const snap = await getDoc(doc(firestore, "race_meta", "ledger"));
-    return snap.exists() ? (snap.data() as T) : seed;
+    try {
+      const snap = await getDoc(doc(firestore, "race_meta", "ledger"));
+      return snap.exists() ? (snap.data() as T) : seed;
+    } catch (err: any) {
+      console.warn(`[race] Firestore loadLedger error: ${err?.message}; using filesystem`);
+    }
   }
   return readJsonFile(path.join(DATA_DIR, "ledger.json"), seed);
 }
 
 export async function saveLedger(ledger: unknown): Promise<void> {
   if (backend === "firestore" && firestore) {
-    await setDoc(doc(firestore, "race_meta", "ledger"), ledger as any);
-    return;
+    try {
+      await setDoc(doc(firestore, "race_meta", "ledger"), ledger as any);
+      return;
+    } catch (err: any) {
+      console.warn(`[race] Firestore saveLedger error: ${err?.message}; falling back to filesystem`);
+    }
   }
   await writeAtomic(path.join(DATA_DIR, "ledger.json"), JSON.stringify(ledger, null, 2));
 }
 
 export async function putRun(runId: string, record: any): Promise<void> {
   if (backend === "firestore" && firestore) {
-    // Firestore rejects undefined; strip it cleanly
-    await setDoc(
-      doc(firestore, RUNS_COLLECTION, runId),
-      JSON.parse(JSON.stringify(record))
-    );
-    return;
+    try {
+      // Firestore rejects undefined; strip it cleanly
+      await setDoc(
+        doc(firestore, RUNS_COLLECTION, runId),
+        JSON.parse(JSON.stringify(record))
+      );
+      return;
+    } catch (err: any) {
+      console.warn(`[race] Firestore putRun error: ${err?.message}; falling back to filesystem`);
+    }
   }
   await writeAtomic(path.join(RUNS_DIR, `${runId}.json`), JSON.stringify(record, null, 2));
 }
 
 export async function fetchRun(runId: string): Promise<any | null> {
   if (backend === "firestore" && firestore) {
-    const snap = await getDoc(doc(firestore, RUNS_COLLECTION, runId));
-    return snap.exists() ? snap.data() : null;
+    try {
+      const snap = await getDoc(doc(firestore, RUNS_COLLECTION, runId));
+      return snap.exists() ? snap.data() : null;
+    } catch (err: any) {
+      console.warn(`[race] Firestore fetchRun error: ${err?.message}; falling back to filesystem`);
+    }
   }
   return readJsonFile(path.join(RUNS_DIR, `${runId}.json`), null);
 }
@@ -215,13 +239,17 @@ export async function appendIndex(entry: any): Promise<void> {
 
 export async function queryRuns(limitCount: number): Promise<any[]> {
   if (backend === "firestore" && firestore) {
-    const q = query(
-      collection(firestore, RUNS_COLLECTION),
-      orderBy("startedAt", "desc"),
-      limit(limitCount)
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => d.data());
+    try {
+      const q = query(
+        collection(firestore, RUNS_COLLECTION),
+        orderBy("startedAt", "desc"),
+        limit(limitCount)
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => d.data());
+    } catch (err: any) {
+      console.warn(`[race] Firestore queryRuns error: ${err?.message}; falling back to filesystem`);
+    }
   }
   try {
     const lines = (await fsp.readFile(path.join(DATA_DIR, "runs.jsonl"), "utf8"))
@@ -237,9 +265,13 @@ export async function queryRuns(limitCount: number): Promise<any[]> {
 /** Step 2 plans, keyed by subject id — one current plan per subject. */
 export async function putTargets(subjectId: string, plan: any): Promise<void> {
   if (backend === "firestore" && firestore) {
-    await setDoc(doc(firestore, TARGETS_COLLECTION, subjectId),
-                 JSON.parse(JSON.stringify(plan)));
-    return;
+    try {
+      await setDoc(doc(firestore, TARGETS_COLLECTION, subjectId),
+                   JSON.parse(JSON.stringify(plan)));
+      return;
+    } catch (err: any) {
+      console.warn(`[race] Firestore putTargets error: ${err?.message}; falling back to filesystem`);
+    }
   }
   await writeAtomic(path.join(DATA_DIR, "targets", `${subjectId}.json`),
                     JSON.stringify(plan, null, 2));
@@ -247,8 +279,12 @@ export async function putTargets(subjectId: string, plan: any): Promise<void> {
 
 export async function fetchTargets(subjectId: string): Promise<any | null> {
   if (backend === "firestore" && firestore) {
-    const snap = await getDoc(doc(firestore, TARGETS_COLLECTION, subjectId));
-    return snap.exists() ? snap.data() : null;
+    try {
+      const snap = await getDoc(doc(firestore, TARGETS_COLLECTION, subjectId));
+      return snap.exists() ? snap.data() : null;
+    } catch (err: any) {
+      console.warn(`[race] Firestore fetchTargets error: ${err?.message}; falling back to filesystem`);
+    }
   }
   return readJsonFile(path.join(DATA_DIR, "targets", `${subjectId}.json`), null);
 }
