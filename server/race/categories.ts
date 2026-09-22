@@ -83,6 +83,10 @@ export interface CategoriesResult {
     /** Price-shaped strings left in the prose, for the operator to eyeball. */
     priceMentions: number;
     thinJustifications: number;
+    /** Watch these against maxTokens — thinking shares the output budget. */
+    outputTokens?: number;
+    thinkingTokens?: number;
+    maxTokens?: number;
   };
   usage?: unknown;
   steps: RunStep[];
@@ -223,9 +227,26 @@ export async function deriveCategories(opts: {
     .filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
 
   const stopReason = resp.stop_reason ?? "unknown";
+  const outTokens = Number(resp.usage?.output_tokens ?? 0);
+  const thinkTokens = Number(resp.usage?.output_tokens_details?.thinking_tokens ?? 0);
   note("info", `Model returned ${text.length} chars · stop_reason ${stopReason}`, {
-    outputTokens: resp.usage?.output_tokens, maxTokens: MAX_TOKENS,
+    outputTokens: outTokens, thinkingTokens: thinkTokens, maxTokens: MAX_TOKENS,
   });
+
+  /*
+   * Watch the ceiling approaching rather than discovering it.
+   *
+   * The first live run spent 6,339 of its 16,000 output tokens on thinking
+   * before writing a character of JSON, so the real writing budget was under
+   * 60% of what the config said. A run that finishes at 85% of the ceiling did
+   * not fail, but the next subject with more review text will.
+   */
+  if (outTokens >= MAX_TOKENS * 0.85) {
+    note("warn",
+         `Output used ${outTokens} of ${MAX_TOKENS} tokens (${thinkTokens} of them ` +
+         "thinking) — close enough to the ceiling that a richer subject will be " +
+         "truncated. Raise RACE_CATEGORIES_MAX_TOKENS.");
+  }
 
   const parsed = parseJson(text);
   if (!parsed?.topCategories && !parsed?.scoringTable) {
@@ -323,6 +344,9 @@ export async function deriveCategories(opts: {
       offerFieldsRemoved: offerTally.removed,
       priceMentions: countPrices(clean),
       thinJustifications: thin,
+      outputTokens: outTokens,
+      thinkingTokens: thinkTokens,
+      maxTokens: MAX_TOKENS,
     },
     usage: resp.usage,
     steps,

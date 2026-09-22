@@ -49,6 +49,7 @@ export type Categories = {
     byRejectionRule: Record<string, number>; dormantFound: boolean;
     identityScrubbed: number; offerFieldsRemoved: number;
     priceMentions: number; thinJustifications: number;
+    outputTokens?: number; thinkingTokens?: number; maxTokens?: number;
   };
   storedIn?: string;
 };
@@ -164,7 +165,8 @@ export const RaceCategories: React.FC<{
           {/* The honesty checks, on screen rather than in the JSON. */}
           {a && (a.thinJustifications > 0 || a.deprioritised === 0 ||
                  a.offerFieldsRemoved > 0 || a.identityScrubbed > 0 ||
-                 a.byRejectionRule?.unstated > 0) && (
+                 a.byRejectionRule?.unstated > 0 ||
+                 (a.maxTokens && a.outputTokens && a.outputTokens >= a.maxTokens * 0.85)) && (
             <div className="px-3 py-2 bg-amber-50 border-b border-amber-100 space-y-0.5">
               {a.deprioritised === 0 && a.ranked > 0 && (
                 <div className="text-[10px] text-amber-800">
@@ -187,6 +189,13 @@ export const RaceCategories: React.FC<{
                 <div className="text-[10px] text-amber-800">
                   {a.offerFieldsRemoved} offer-shaped field(s) removed — the model
                   reached past the category into step 6.
+                </div>
+              )}
+              {a.maxTokens && a.outputTokens && a.outputTokens >= a.maxTokens * 0.85 && (
+                <div className="text-[10px] text-amber-800">
+                  Output used {a.outputTokens} of {a.maxTokens} tokens
+                  {a.thinkingTokens ? ` (${a.thinkingTokens} of them thinking)` : ''} —
+                  close to the ceiling. A richer subject will be truncated.
                 </div>
               )}
               {a.identityScrubbed > 0 && (
