@@ -38,7 +38,7 @@ export const Step4ProfileFetch: React.FC<Step4ProfileFetchProps> = ({
             STEP 4 OF 6
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-neutral-900">
-            Profile fetch
+            Enriched Data
           </h2>
           <p className="text-xs text-neutral-500 font-medium mt-1">
             What each public profile actually returned.
@@ -161,23 +161,9 @@ export const Step4ProfileFetch: React.FC<Step4ProfileFetchProps> = ({
                   />
                 </div>
               </div>
-
-              {prof.note && (
-                <p className="text-[11px] text-neutral-500 leading-relaxed font-medium pt-1">
-                  {prof.note}
-                </p>
-              )}
             </div>
           </div>
         ))}
-      </div>
-
-      {/* Info Callout */}
-      <div className="p-4 bg-neutral-50/90 border border-neutral-200/60 rounded-2xl flex items-start gap-2.5 text-xs text-neutral-600 font-medium">
-        <span className="text-neutral-400 font-bold shrink-0">ⓘ</span>
-        <span>
-          Status is judged by the fields returned, not by item count or response code.
-        </span>
       </div>
 
       {/* Bottom Actions */}

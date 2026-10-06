@@ -338,7 +338,7 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
     },
     {
       num: 4,
-      title: 'Profile fetch',
+      title: 'Enriched Data',
       subtitle: data.step >= 4 ? `${data.profileFetch.usable} of ${data.sourcePlan.readyCount} usable` : 'Public profiles',
     },
     {
