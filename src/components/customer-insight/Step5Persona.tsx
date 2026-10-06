@@ -335,7 +335,7 @@ export const Step5Persona: React.FC<Step5PersonaProps> = ({ data, onBack, onNext
             disabled={busy}
             className="px-6 py-2.5 text-xs font-semibold text-white bg-[#1e293b] hover:bg-[#0f172a] rounded-xl shadow-xs transition-colors cursor-pointer"
           >
-            Find relevant categories
+            Find preferred areas
           </button>
         </div>
       </div>

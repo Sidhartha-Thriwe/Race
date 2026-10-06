@@ -236,25 +236,55 @@ const RULE_LABEL: Record<string, string> = {
   out_of_scope: 'Out of scope',
 };
 
+
+/** Shorten to one readable clause: cut at a natural break, then at a word. */
+const upper = (t: string) => (t ? t[0]!.toUpperCase() + t.slice(1) : t);
+const clip = (text: string, max = 118): string => {
+  const t = text.trim().replace(/\s+/g, ' ');
+  const brk = t.search(/\s—\s|;\s|:\s/);
+  const base = brk >= 40 ? t.slice(0, brk) : t;
+  if (base.length <= max) return upper(base.replace(/[.,;:\s]+$/, ''));
+  const head = base.slice(0, max);
+  const comma = head.lastIndexOf(', ');
+  if (comma >= 40) return upper(head.slice(0, comma));          // a whole clause, no ellipsis
+  const sp = head.lastIndexOf(' ');
+  return upper(head.slice(0, sp > 60 ? sp : max).replace(/[,;:\s—-]+$/, '')) + '…';
+};
+
+const sentences = (s: string) =>
+  s.split(/(?<=[.!?])\s+(?=[A-Z"'(])/).map((x) => x.trim()).filter(Boolean);
+
+/** Up to three bullets from a rationale: what was seen, how it reads, and the caveat. */
+const toBullets = (rationale: string): { text: string; caveat?: boolean }[] => {
+  const ss = sentences(rationale);
+  const isCaveat = (x: string) => /weakness|weak base|weak spot|caveat|limitation/i.test(x);
+  const caveat = ss.find(isCaveat);
+  const rest = ss.filter((x) => x !== caveat);
+  const out: { text: string; caveat?: boolean }[] = [];
+  if (rest[0]) out.push({ text: clip(rest[0]) });
+  if (rest[1]) out.push({ text: clip(rest[1]) });
+  if (caveat) out.push({ text: clip(caveat.replace(/^.*?\b(?:weakness|weak base|weak spot)\s*:\s*/i, '')), caveat: true });
+  else if (rest[2]) out.push({ text: clip(rest[2]) });
+  return out.slice(0, 3);
+};
+
 /** Step 5 categories → step 6 screen. */
 export function mapCategories(c: Categories): Patch {
   const rows = c.scoringTable ?? [];
   const byId = new Map(rows.map((r) => [r.category.toLowerCase(), r]));
   const rejected = rows.filter((r) => r.outcome === 'deprioritised' || r.rejected);
-  const rules = Object.entries(c.audit?.byRejectionRule ?? {}).sort((a, b) => b[1] - a[1]);
-  const firstSentence = (c.scoringNote ?? '').split(/(?<=[.!?])\s+/)[0] ?? '';
+  const ruleTally = new Map<string, number>();
+  for (const r of rejected) {
+    const k = RULE_LABEL[r.rejectionRule ?? ''] ?? 'No rule stated';
+    ruleTally.set(k, (ruleTally.get(k) ?? 0) + 1);
+  }
+  const ruleCounts = Array.from(ruleTally, ([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
 
   return {
     categories: {
-      whyRanking: [
-        { icon: 'briefcase', title: `${c.audit?.ranked ?? c.topCategories.length} ranked from ${c.audit?.candidates ?? rows.length} candidates`,
-          subtitle: firstSentence },
-        { icon: 'slash', title: `${rejected.length} set aside`,
-          subtitle: rules.map(([r, n]) => `${RULE_LABEL[r] ?? r} ${n}`).join(' · ') || 'None rejected' },
-        { icon: 'eye-off', title: c.audit?.dormantFound ? 'Dormant paid affinity found' : 'No dormant paid affinity',
-          subtitle: c.audit?.dormantFound ? 'A paid tier opened and left unused was found.'
-                                          : 'No paid tier shown anywhere in the evidence.' },
-      ],
+      whyRanking: [],
+      dormantFound: !!c.audit?.dormantFound,
+      ruleCounts,
       scoredCount: rows.length || c.audit?.candidates || 0,
       rankedCount: c.topCategories.length,
       setAsideCount: rejected.length,
@@ -265,12 +295,13 @@ export function mapCategories(c: Categories): Patch {
           tags: [row?.confidence ? `${row.confidence} confidence` : '', row?.motivator ?? '']
             .filter(Boolean),
           evidence: t.evidenceStrength, psychFit: t.psychFit,
+          bullets: toBullets(t.rationale),
         };
       }),
       setAside: rejected.map((r) => ({
         title: r.category,
-        reason: [r.rejectionRule ? (RULE_LABEL[r.rejectionRule] ?? r.rejectionRule) : '', r.dispositionNote]
-          .filter(Boolean).join(' — '),
+        rule: r.rejectionRule ? (RULE_LABEL[r.rejectionRule] ?? r.rejectionRule) : undefined,
+        reason: clip((r.dispositionNote ?? '').replace(/^[A-Za-z' ,]{3,40}\s—\s/, ''), 96),
       })),
     },
   };

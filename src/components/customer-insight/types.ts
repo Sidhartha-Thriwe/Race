@@ -118,6 +118,8 @@ export interface CustomerInsightRunData {
       title: string;
       subtitle: string;
     }>;
+    dormantFound?: boolean;
+    ruleCounts?: Array<{ label: string; count: number }>;
     scoredCount: number;
     rankedCount: number;
     setAsideCount: number;
@@ -128,10 +130,12 @@ export interface CustomerInsightRunData {
       tags: string[];
       evidence: number;
       psychFit: number;
+      bullets?: Array<{ text: string; caveat?: boolean }>;
     }>;
     setAside: Array<{
       title: string;
       reason: string;
+      rule?: string;
     }>;
   };
 }

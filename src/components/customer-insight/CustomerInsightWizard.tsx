@@ -348,7 +348,7 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
     },
     {
       num: 6,
-      title: 'Categories',
+      title: 'Preferred Areas',
       subtitle: data.step >= 6 ? `${data.categories.rankedCount} ranked` : 'Ranked interests',
     },
   ];

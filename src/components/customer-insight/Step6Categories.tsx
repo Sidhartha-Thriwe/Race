@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CustomerInsightRunData } from './types';
-import { Download, Briefcase, Ban, EyeOff, CheckCircle2 } from 'lucide-react';
+import { Download, EyeOff, CheckCircle2, Check } from 'lucide-react';
 
 interface Step6CategoriesProps {
   data: CustomerInsightRunData;
@@ -38,7 +38,7 @@ export const Step6Categories: React.FC<Step6CategoriesProps> = ({
             STEP 6 OF 6
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-neutral-900">
-            Categories
+            Preferred Areas
           </h2>
           <p className="text-xs text-neutral-500 font-medium mt-1">
             What this subject is drawn to, ranked by evidence and fit.
@@ -50,24 +50,53 @@ export const Step6Categories: React.FC<Step6CategoriesProps> = ({
         </div>
       </div>
 
-      {/* Why this ranking (3 Cards) */}
+      {/* Why this ranking — scored → preferred / less preferred */}
       <div className="space-y-3">
-        <h3 className="text-xs font-bold text-neutral-800 px-1">
-          Why this ranking
-        </h3>
+        <h3 className="text-xs font-bold text-neutral-800 px-1">Why this ranking</h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {categories.whyRanking.map((w, i) => (
-            <div key={i} className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-xs space-y-3">
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${w.icon === 'eye-off' ? 'bg-amber-50 text-amber-700' : 'bg-neutral-100 text-neutral-700'}`}>
-                {w.icon === 'briefcase' ? <Briefcase size={16} /> : w.icon === 'slash' ? <Ban size={16} /> : <EyeOff size={16} />}
-              </div>
-              <div>
-                <div className="text-sm font-bold text-neutral-900">{w.title}</div>
-                <div className="text-xs text-neutral-500 font-medium mt-0.5">{w.subtitle}</div>
-              </div>
+        <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-xs grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+          {/* Funnel */}
+          <div className="md:col-span-5 space-y-2.5">
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold tracking-tight text-neutral-900 tabular-nums">{categories.scoredCount}</span>
+              <span className="text-xs font-medium text-neutral-500">areas scored</span>
             </div>
-          ))}
+            <div className="h-3 rounded-full overflow-hidden flex bg-neutral-100">
+              <div style={{ width: `${(categories.rankedCount / Math.max(1, categories.scoredCount)) * 100}%` }} className="bg-[#1e293b]" />
+              <div style={{ width: `${(categories.setAsideCount / Math.max(1, categories.scoredCount)) * 100}%` }} className="bg-neutral-300" />
+            </div>
+            <div className="flex items-center gap-4 text-[11px] font-medium text-neutral-600">
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#1e293b]" />{categories.rankedCount} preferred</span>
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-neutral-300" />{categories.setAsideCount} less preferred</span>
+            </div>
+          </div>
+
+          {/* Why areas were set aside */}
+          <div className="md:col-span-5 space-y-2 md:border-l md:border-neutral-100 md:pl-6">
+            <div className="text-[11px] font-semibold text-neutral-500">Why others ranked lower</div>
+            {(categories.ruleCounts ?? []).length === 0 ? (
+              <div className="text-xs text-neutral-400">None set aside</div>
+            ) : (categories.ruleCounts ?? []).map((r) => (
+              <div key={r.label} className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1">
+                <span className="text-[11.5px] text-neutral-700 font-medium truncate">{r.label}</span>
+                <span className="font-mono text-[11px] font-bold text-neutral-900 tabular-nums">{r.count}</span>
+                <div className="col-span-2 h-1 bg-neutral-100 rounded-full overflow-hidden">
+                  <div style={{ width: `${(r.count / Math.max(1, categories.setAsideCount)) * 100}%` }} className="h-full bg-neutral-400 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Dormant paid affinity */}
+          <div className="md:col-span-2 md:border-l md:border-neutral-100 md:pl-6 space-y-1.5">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${categories.dormantFound ? 'bg-amber-50 text-amber-700' : 'bg-neutral-100 text-neutral-500'}`}>
+              {categories.dormantFound ? <EyeOff size={16} /> : <Check size={16} />}
+            </div>
+            <div className="text-[11px] font-semibold text-neutral-500 leading-tight">Dormant paid affinity</div>
+            <div className={`text-sm font-bold ${categories.dormantFound ? 'text-amber-700' : 'text-neutral-900'}`}>
+              {categories.dormantFound ? 'Found' : 'None'}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -79,7 +108,7 @@ export const Step6Categories: React.FC<Step6CategoriesProps> = ({
               Ranked categories
             </h3>
             <p className="text-xs text-neutral-500 font-medium mt-0.5">
-              {categories.scoredCount} scored · {categories.rankedCount} ranked · {categories.setAsideCount} set aside
+              {categories.scoredCount} scored · {categories.rankedCount} preferred · {categories.setAsideCount} less preferred
             </p>
           </div>
 
@@ -112,9 +141,17 @@ export const Step6Categories: React.FC<Step6CategoriesProps> = ({
                   <h4 className="text-sm font-bold text-neutral-900">
                     {item.title}
                   </h4>
-                  <p className="text-xs text-neutral-600 font-medium leading-relaxed max-w-xl">
-                    {item.description}
-                  </p>
+                  <ul className="space-y-1.5 max-w-xl pt-0.5">
+                    {(item.bullets && item.bullets.length ? item.bullets : [{ text: item.description }]).map((b, bIdx) => (
+                      <li key={bIdx} className="flex items-start gap-2 text-xs leading-relaxed">
+                        <span className={`mt-[7px] w-1 h-1 rounded-full shrink-0 ${b.caveat ? 'bg-amber-500' : 'bg-neutral-400'}`} />
+                        <span className={b.caveat ? 'text-amber-800 font-medium' : 'text-neutral-600 font-medium'}>
+                          {b.caveat && <span className="font-bold">Watch-out: </span>}
+                          {b.text}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
 
                   {item.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 pt-1">
@@ -169,20 +206,22 @@ export const Step6Categories: React.FC<Step6CategoriesProps> = ({
           ))}
         </div>
 
-        {/* Set Aside Section (Collapsible) */}
+        {/* Less preferred areas (collapsible) */}
         {showSetAside && (
           <div className="pt-4 border-t border-neutral-100 space-y-3">
-            <h4 className="text-xs font-bold text-neutral-800">
-              {categories.setAsideCount} Set Aside Categories
-            </h4>
+            <h4 className="text-xs font-bold text-neutral-800">Less preferred areas</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
               {categories.setAside.map((sa, idx) => (
-                <div
-                  key={idx}
-                  className="p-2.5 bg-neutral-50 rounded-xl border border-neutral-200/60 space-y-0.5"
-                >
-                  <div className="font-medium text-neutral-800">{sa.title}</div>
-                  <div className="text-[11px] text-neutral-500 leading-relaxed">{sa.reason}</div>
+                <div key={idx} className="p-3 bg-neutral-50 rounded-xl border border-neutral-200/60 space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-semibold text-neutral-800 leading-snug">{sa.title}</span>
+                    {sa.rule && (
+                      <span className="shrink-0 px-2 py-0.5 bg-white border border-neutral-200 rounded-md text-[10.5px] text-neutral-600 font-medium">
+                        {sa.rule}
+                      </span>
+                    )}
+                  </div>
+                  {sa.reason && <div className="text-[11px] text-neutral-500 leading-relaxed">{sa.reason}</div>}
                 </div>
               ))}
             </div>
@@ -190,16 +229,13 @@ export const Step6Categories: React.FC<Step6CategoriesProps> = ({
         )}
 
         {/* Footer */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-neutral-100 text-xs text-neutral-500">
-          <span>
-            Categories only. Offers are a separate step with their own rules.
-          </span>
+        <div className="flex items-center justify-end pt-2 border-t border-neutral-100 text-xs text-neutral-500">
           <button
             type="button"
             onClick={() => setShowSetAside(!showSetAside)}
-            className="font-semibold text-[#1e293b] hover:underline cursor-pointer self-start sm:self-auto"
+            className="font-semibold text-[#1e293b] hover:underline cursor-pointer"
           >
-            {showSetAside ? 'Hide set aside' : `Show ${categories.setAsideCount} set aside`}
+            {showSetAside ? 'Hide less preferred areas' : `Show less preferred areas (${categories.setAsideCount})`}
           </button>
         </div>
       </div>
