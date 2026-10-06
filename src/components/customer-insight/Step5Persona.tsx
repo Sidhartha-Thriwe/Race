@@ -32,15 +32,9 @@ export const Step5Persona: React.FC<Step5PersonaProps> = ({
 
   // Helper for Radar/Spider Chart SVG coordinates
   // 6 axes: 0: Achievement (top), 1: Self-direction, 2: Learning, 3: Affiliation, 4: Status, 5: Thrift
-  const radarAxes = [
-    { name: 'Achievement', score: 9 },
-    { name: 'Self-direction', score: 8 },
-    { name: 'Learning', score: 8 },
-    { name: 'Affiliation', score: 5 },
-    { name: 'Status', score: 3 },
-    { name: 'Thrift', score: 7 },
-  ];
-
+  const radarAxes = persona.traits.filter((t) => t.narrative === 'Motive').slice(0, 6)
+    .map((t) => ({ name: t.name, score: t.score }));
+  const totalAttrs = Math.max(1, persona.attributesCount);
   const size = 260;
   const center = size / 2;
   const radius = 90;
@@ -150,22 +144,28 @@ export const Step5Persona: React.FC<Step5PersonaProps> = ({
           </div>
           <div className="h-2 bg-neutral-100 rounded-full overflow-hidden flex">
             <div
-              style={{ width: `${(persona.confidence.high / 38) * 100}%` }}
+              style={{ width: `${(persona.confidence.high / totalAttrs) * 100}%` }}
               className="bg-[#1e293b]"
             />
             <div
-              style={{ width: `${(persona.confidence.medium / 38) * 100}%` }}
+              style={{ width: `${(persona.confidence.medium / totalAttrs) * 100}%` }}
               className="bg-[#64748b]"
             />
             <div
-              style={{ width: `${(persona.confidence.low / 38) * 100}%` }}
+              style={{ width: `${(persona.confidence.low / totalAttrs) * 100}%` }}
               className="bg-[#d97706]"
+            />
+            <div
+              style={{ width: `${(((persona.confidence.estimated ?? 0) + (persona.confidence.insufficient ?? 0)) / totalAttrs) * 100}%` }}
+              className="bg-neutral-300"
             />
           </div>
           <div className="flex items-center justify-between text-[10.5px] text-neutral-500 font-medium">
             <span>High {persona.confidence.high}</span>
             <span>Medium {persona.confidence.medium}</span>
             <span>Low {persona.confidence.low}</span>
+            {(persona.confidence.estimated ?? 0) > 0 && <span>Est. {persona.confidence.estimated}</span>}
+            {(persona.confidence.insufficient ?? 0) > 0 && <span>Insufficient {persona.confidence.insufficient}</span>}
           </div>
         </div>
       </div>
@@ -355,7 +355,9 @@ export const Step5Persona: React.FC<Step5PersonaProps> = ({
                               ? 'bg-[#1e293b]'
                               : attr.confidence === 'medium'
                               ? 'bg-[#64748b]'
-                              : 'bg-[#d97706]'
+                              : attr.confidence === 'low'
+                              ? 'bg-[#d97706]'
+                              : 'bg-neutral-300'
                           }`}
                         />
                       </div>
@@ -411,7 +413,9 @@ export const Step5Persona: React.FC<Step5PersonaProps> = ({
                               ? 'bg-[#1e293b]'
                               : attr.confidence === 'medium'
                               ? 'bg-[#64748b]'
-                              : 'bg-[#d97706]'
+                              : attr.confidence === 'low'
+                              ? 'bg-[#d97706]'
+                              : 'bg-neutral-300'
                           }`}
                         />
                       </div>
@@ -435,7 +439,7 @@ export const Step5Persona: React.FC<Step5PersonaProps> = ({
         </div>
 
         <p className="text-xs text-neutral-500 font-medium px-1">
-          Showing 16 of {persona.attributesCount} attributes. Sparse means unobserved, not absent.
+          Showing {persona.attributeAreas.reduce((n, a) => n + a.attributes.length, 0)} of {persona.attributesCount} attributes. Sparse means unobserved, not absent.
         </p>
       </div>
 

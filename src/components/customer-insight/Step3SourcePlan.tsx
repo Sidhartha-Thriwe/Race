@@ -75,15 +75,15 @@ export const Step3SourcePlan: React.FC<Step3SourcePlanProps> = ({
             {/* Stacked Progress Bar */}
             <div className="h-3.5 bg-neutral-100 rounded-full overflow-hidden flex">
               <div
-                style={{ width: `${(sourcePlan.readyCount / sourcePlan.modulesRouted) * 100}%` }}
+                style={{ width: `${(sourcePlan.readyCount / Math.max(1, sourcePlan.modulesRouted)) * 100}%` }}
                 className="bg-[#1e293b]"
               />
               <div
-                style={{ width: `${(sourcePlan.blockedCount / sourcePlan.modulesRouted) * 100}%` }}
+                style={{ width: `${(sourcePlan.blockedCount / Math.max(1, sourcePlan.modulesRouted)) * 100}%` }}
                 className="bg-[#d97706]"
               />
               <div
-                style={{ width: `${(sourcePlan.noRouteCount / sourcePlan.modulesRouted) * 100}%` }}
+                style={{ width: `${(sourcePlan.noRouteCount / Math.max(1, sourcePlan.modulesRouted)) * 100}%` }}
                 className="bg-[#cbd5e1]"
               />
             </div>
@@ -230,7 +230,7 @@ export const Step3SourcePlan: React.FC<Step3SourcePlanProps> = ({
             Back
           </button>
           <span className="text-xs font-semibold text-neutral-500">
-            Estimated $0.05
+            Apify bills per result, so cost is known after the run
           </span>
         </div>
 

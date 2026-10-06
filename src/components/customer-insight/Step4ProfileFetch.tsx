@@ -89,7 +89,7 @@ export const Step4ProfileFetch: React.FC<Step4ProfileFetchProps> = ({
           </div>
           <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
             <div
-              style={{ width: `${(profileFetch.fieldsFilled / profileFetch.totalFields) * 100}%` }}
+              style={{ width: `${(profileFetch.totalFields ? (profileFetch.fieldsFilled / profileFetch.totalFields) * 100 : 0)}%` }}
               className="h-full bg-[#1e293b] rounded-full"
             />
           </div>
@@ -98,7 +98,7 @@ export const Step4ProfileFetch: React.FC<Step4ProfileFetchProps> = ({
 
       {/* Grid of Results */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {profileFetch.profiles.slice(0, 3).map((prof, idx) => (
+        {profileFetch.profiles.map((prof, idx) => (
           <div
             key={idx}
             className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-xs space-y-4 flex flex-col justify-between"
@@ -150,7 +150,7 @@ export const Step4ProfileFetch: React.FC<Step4ProfileFetchProps> = ({
                 </div>
                 <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
                   <div
-                    style={{ width: `${(prof.fieldsFilled / prof.totalFields) * 100}%` }}
+                    style={{ width: `${(prof.totalFields ? (prof.fieldsFilled / prof.totalFields) * 100 : 0)}%` }}
                     className={`h-full rounded-full ${
                       prof.status === 'good'
                         ? 'bg-[#1e293b]'
@@ -171,56 +171,6 @@ export const Step4ProfileFetch: React.FC<Step4ProfileFetchProps> = ({
           </div>
         ))}
       </div>
-
-      {/* Row for Google Maps / Failed card */}
-      {profileFetch.profiles[3] && (
-        <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-xs space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-red-50 text-red-700 flex items-center justify-center text-xs font-bold">
-                ✕
-              </div>
-              <div>
-                <div className="text-sm font-bold text-neutral-900">
-                  {profileFetch.profiles[3].platform}
-                </div>
-                <div className="text-[11px] font-mono text-neutral-400">
-                  {profileFetch.profiles[3].duration} · ${profileFetch.profiles[3].costUSD.toFixed(2)}
-                </div>
-              </div>
-            </div>
-
-            <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-red-50 text-red-700 border border-red-200/60">
-              Failed
-            </span>
-          </div>
-
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs text-neutral-600 font-medium">
-              <span>Fields filled</span>
-              <span className="font-mono tabular-nums font-bold text-neutral-900">
-                0 / {profileFetch.profiles[3].totalFields}
-              </span>
-            </div>
-            <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
-              <div style={{ width: '0%' }} className="h-full bg-red-500 rounded-full" />
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-neutral-100 flex items-center justify-between">
-            <span className="text-xs text-neutral-500 font-medium">
-              Returned an error report, not data.
-            </span>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-neutral-700 bg-white border border-neutral-200 rounded-xl hover:bg-neutral-50 transition-colors cursor-pointer"
-            >
-              <RefreshCw size={12} />
-              <span>Retry</span>
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Info Callout */}
       <div className="p-4 bg-neutral-50/90 border border-neutral-200/60 rounded-2xl flex items-start gap-2.5 text-xs text-neutral-600 font-medium">

@@ -1,5 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { CustomerInsightRunData, SAMPLE_S01_DATA, SectorType } from './types';
+import React, { useState, useEffect, useRef } from 'react';
+import { CustomerInsightRunData, SectorType } from './types';
+import { EMPTY_RUN, mapRun, mapPlan, mapScrape, mapPersona, mapCategories } from './liveMap';
+import type { Plan } from '../RaceTargets';
+import type { Scrape } from '../RaceScrape';
+import type { Persona } from '../RacePersona';
+import type { Categories } from '../RaceCategories';
+import { raceFetch } from '../raceApi';
 import { Step1Subject } from './Step1Subject';
 import { Step2IdentityMatch } from './Step2IdentityMatch';
 import { Step3SourcePlan } from './Step3SourcePlan';
@@ -14,16 +20,20 @@ interface CustomerInsightWizardProps {
   onBackToCapabilities?: () => void;
 }
 
+type Live = { plan?: Plan; scrape?: Scrape; persona?: Persona; categories?: Categories };
+type Banner = { msg: string; hint?: string; needsWorkspace?: boolean };
+
+const MIN_MS = 4000;
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
   onBackToCapabilities,
 }) => {
-  const [data, setData] = useState<CustomerInsightRunData>({
-    ...SAMPLE_S01_DATA,
-    step: 1,
-    isStored: false,
-    email: '',
-    isLawfulConsent: true,
-  });
+  const [data, setData] = useState<CustomerInsightRunData>({ ...EMPTY_RUN });
+  const [live, setLive] = useState<Live>({});
+  const [banner, setBanner] = useState<Banner | null>(null);
+  const [workspaceInput, setWorkspaceInput] = useState('');
+  const cancelled = useRef(false);
 
   const [maxStepReached, setMaxStepReached] = useState<number>(1);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -31,16 +41,16 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
   const [processingSubtitle, setProcessingSubtitle] = useState<string>('');
 
   // Live RACE hooks & state
-  const { run, busy, storage, subjects, estimateINR, spentThisMonth,
+  const { busy, subjects, estimateINR, spentThisMonth, error: raceError, hint: raceHint,
           configuredVendors, start, loadSubject } = useRaceRun();
 
-  // Sync monthly spend from server if available
+  // Month-to-date from the server; the pre-run estimate only while still on step 1.
   useEffect(() => {
     if (spentThisMonth != null) {
       setData((prev) => ({ ...prev, monthToDateINR: spentThisMonth }));
     }
     if (estimateINR != null && estimateINR > 0) {
-      setData((prev) => ({ ...prev, vendorSpendINR: estimateINR }));
+      setData((prev) => (prev.step === 1 ? { ...prev, vendorSpendINR: estimateINR } : prev));
     }
   }, [spentThisMonth, estimateINR]);
 
@@ -48,97 +58,146 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
     setData((prev) => ({ ...prev, ...partial }));
   };
 
-  const triggerProcessingTransition = (
-    messages: string[],
-    subtitle: string,
-    onFinish: () => void,
-    durationMs: number = 4200
+  /**
+   * The overlay stays up for at least MIN_MS and until `work` has actually
+   * finished — a run, a scrape, a model call. `work` applies its own result and
+   * returns false on failure, in which case the wizard stays where it was.
+   */
+  const runWithOverlay = async (
+    messages: string[], subtitle: string, work: () => Promise<boolean>,
   ) => {
+    setBanner(null);
+    cancelled.current = false;
     setProcessingMessages(messages);
     setProcessingSubtitle(subtitle);
     setIsProcessing(true);
-
-    setTimeout(() => {
+    try {
+      await Promise.all([work().catch((e) => {
+        setBanner({ msg: e?.message ?? 'Something went wrong' }); return false;
+      }), sleep(MIN_MS)]);
+    } finally {
       setIsProcessing(false);
-      onFinish();
-    }, durationMs);
+    }
   };
 
-  const handleRunIdentityMatch = async () => {
-    const messages = [
+  /** Start-then-poll for the model steps; the proxy in front of Cloud Run cuts a long response. */
+  const pollDone = async <T extends { status?: string; error?: string }>(path: string): Promise<T | null> => {
+    const deadline = Date.now() + 20 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await sleep(5000);
+      const r = await raceFetch<T>(path);
+      if (!r.ok || !r.data) continue;          // a dropped poll is not a failed run
+      if (r.data.status === 'running') continue;
+      return r.data;
+    }
+    return null;
+  };
+
+  const workspaceBody = () => {
+    const ws = sessionStorage.getItem('anthropic_workspace_id') ?? '';
+    return ws ? { workspaceId: ws } : {};
+  };
+
+  const fail = (res: { error?: string; hint?: string; needsWorkspaceId?: boolean }, fallback: string) => {
+    setBanner({
+      msg: res.error ?? fallback, hint: res.hint,
+      needsWorkspace: res.needsWorkspaceId || /workspace/i.test(res.error ?? ''),
+    });
+    return false;
+  };
+
+  const advanceTo = (step: number, patch: Partial<CustomerInsightRunData> = {}) => {
+    setData((prev) => ({ ...prev, ...patch, step }));
+    setMaxStepReached((prev) => Math.max(prev, step));
+  };
+
+  // ---------------------------------------------------------------- step 1
+  const handleRunIdentityMatch = () => runWithOverlay(
+    [
       'Connecting to OSINT Industries & Behind the Email...',
       'Verifying domain routing & email hash...',
-      'Resolving 42 module footprints across vendors...',
+      'Reading module footprints across vendors...',
       'Merging de-duplicated profile records...',
-      'Saving identity match results to audit store...'
-    ];
-    const subtitle = `Querying live intelligence graph for ${data.email || 'contact'} in ${data.sector}...`;
-
-    triggerProcessingTransition(messages, subtitle, () => {
-      if (data.isStored) {
-        setData((prev) => ({
-          ...prev,
-          ...SAMPLE_S01_DATA,
-          step: 2,
-          sector: prev.sector,
-          ticketPrice: prev.ticketPrice,
-        }));
-        setMaxStepReached(Math.max(maxStepReached, 6));
-      } else {
-        start({
-          email: data.email,
-          sector: data.sector,
-          ticketBand: data.ticketPrice,
-          useCase: 'customer_insight',
-          vendors: configuredVendors.length > 0 ? configuredVendors : ['osint', 'bte'],
-        });
-
-        setData((prev) => ({
-          ...prev,
-          step: 2,
-          subjectId: 'Subject P-20',
-          runLog: [
-            { time: new Date().toLocaleTimeString(), message: 'Run accepted' },
-            { time: new Date().toLocaleTimeString(), message: 'Two vendors set' },
-            { time: new Date().toLocaleTimeString(), message: 'Processing vendor streams...' },
-          ],
-        }));
-        setMaxStepReached(Math.max(maxStepReached, 2));
+      'Saving identity match results to the audit store...',
+    ],
+    `Querying live intelligence graph for ${data.email || 'contact'} in ${data.sector}...`,
+    async () => {
+      const finished = await start({
+        email: data.email,
+        sector: data.sector,
+        ticketBand: data.ticketPrice,
+        useCase: 'customer_insight',
+        vendors: configuredVendors.length > 0 ? configuredVendors : ['osint', 'bte'],
+      });
+      if (cancelled.current) return false;
+      if (!finished) {
+        setBanner({ msg: 'The run could not start.' });
+        return false;
       }
-    }, 4500);
-  };
+      if (finished.status !== 'completed' || !finished.views) {
+        setBanner({ msg: finished.error ?? 'The run did not complete, so there is nothing to show.' });
+        return false;
+      }
+      setLive({});
+      setData((prev) => ({
+        ...EMPTY_RUN,
+        sector: prev.sector, ticketPrice: prev.ticketPrice, isLawfulConsent: prev.isLawfulConsent,
+        monthToDateINR: prev.monthToDateINR, isStored: false,
+        ...mapRun(finished, prev.email), step: 2,
+      }));
+      setMaxStepReached(2);
+      return true;
+    },
+  );
 
-  const handleLoadStoredSubject = async (subjectId: string) => {
-    const messages = [
+  // ----------------------------------------------------- stored subject (free)
+  const handleLoadStoredSubject = (subjectId: string) => runWithOverlay(
+    [
       `Loading stored bundle for ${subjectId}...`,
       'Retrieving verified identity modules...',
       'Restoring source plan and scrape results...',
-      'Loading computed persona and ranked categories...'
-    ];
-    triggerProcessingTransition(messages, 'Loading cached artifact without vendor charges.', async () => {
-      const bundle = await loadSubject(subjectId);
-      if (bundle) {
-        setData((prev) => ({
-          ...prev,
-          ...SAMPLE_S01_DATA,
-          step: 2,
-          subjectId,
-          email: bundle.email || prev.email,
-          sector: (bundle.run?.sector as SectorType) || prev.sector,
-          ticketPrice: bundle.run?.ticketBand || prev.ticketPrice,
-        }));
-        setMaxStepReached(6);
-      } else {
-        setData((prev) => ({
-          ...prev,
-          ...SAMPLE_S01_DATA,
-          step: 2,
-          subjectId,
-        }));
-        setMaxStepReached(6);
+      'Loading computed persona and ranked categories...',
+    ],
+    'Loading stored results without vendor charges.',
+    async () => {
+      const bundle: any = await loadSubject(subjectId);
+      if (cancelled.current) return false;
+      if (!bundle?.run?.views) {
+        setBanner({ msg: raceError ?? `No stored run for ${subjectId}.`, hint: raceHint ?? undefined });
+        return false;
       }
-    }, 3800);
-  };
+      const plan: Plan | undefined = bundle.plan ?? undefined;
+      const scrape: Scrape | undefined = bundle.scrape ?? undefined;
+      const persona: Persona | undefined =
+        bundle.persona?.status !== 'failed' && bundle.persona?.attributeGroups?.length ? bundle.persona : undefined;
+      const categories: Categories | undefined =
+        bundle.categories?.status !== 'failed' && bundle.categories?.topCategories?.length ? bundle.categories : undefined;
+
+      // A step is reachable only if everything before it exists.
+      let reached = 2;
+      if (plan) { reached = 3;
+        if (scrape) { reached = 4;
+          if (persona) { reached = 5;
+            if (categories) reached = 6; } } }
+
+      setLive({ plan, scrape, persona, categories });
+      setData((prev) => ({
+        ...EMPTY_RUN,
+        sector: (bundle.run?.sector as SectorType) || prev.sector,
+        ticketPrice: bundle.run?.ticketBand || prev.ticketPrice,
+        isLawfulConsent: prev.isLawfulConsent, monthToDateINR: prev.monthToDateINR,
+        isStored: true,
+        ...mapRun(bundle.run, bundle.email ?? ''),
+        ...(plan ? mapPlan(plan) : {}),
+        ...(scrape ? mapScrape(scrape) : {}),
+        ...(persona ? mapPersona(persona) : {}),
+        ...(categories ? mapCategories(categories) : {}),
+        step: 2,
+      }));
+      setMaxStepReached(reached);
+      return true;
+    },
+  );
 
   const goToStep = (stepNumber: number) => {
     if (stepNumber <= maxStepReached) {
@@ -146,59 +205,102 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
     }
   };
 
-  const handleNextStep = () => {
-    const nextStep = Math.min(data.step + 1, 6);
-
-    // Custom messages for each step transition
-    let messages: string[] = [];
-    let subtitle = '';
+  // ------------------------------------------------ steps 2 → 3 … 5 → 6
+  const handleNextStep = async () => {
+    const id = data.subjectId;
+    const base = `/api/race/subjects/${id}`;
 
     if (data.step === 2) {
-      messages = [
-        'Analyzing 42 module identifiers...',
-        'Checking actor policies and rate limit rules...',
-        'Filtering login-walled and policy-excluded platforms...',
-        'Constructing verified source routing plan...'
-      ];
-      subtitle = 'Planning profile fetch without calling unverified endpoints.';
-    } else if (data.step === 3) {
-      messages = [
-        'Dispatching profile readers to 4 ready sources...',
-        'Extracting professional credentials from LinkedIn...',
-        'Parsing learner telemetry from Duolingo...',
-        'Handling contested stub responses...',
-        'Compiling 58 field attributes...'
-      ];
-      subtitle = 'Executing reviewed source plan ($0.05 spend).';
-    } else if (data.step === 4) {
-      messages = [
-        'Initializing Claude Opus 5 synthesis pipeline...',
-        'Extracting 38 verified behavioral attributes...',
-        'Computing 6 psychographic trait propensity scores...',
-        'Generating dimensional spider chart vector weights...',
-        'Finalizing persona audit breakdown...'
-      ];
-      subtitle = 'Deriving psychographic persona models from verified profile data.';
-    } else if (data.step === 5) {
-      messages = [
-        'Scoring 15 candidate affinity categories...',
-        'Evaluating career density and spend signal flags...',
-        'Ranking top 4 high-propensity categories...',
-        'Applying disposition notes to 11 set-aside items...',
-        'Synthesizing final category intelligence...'
-      ];
-      subtitle = 'Calibrating interest rankings by evidence and psychological fit.';
+      if (live.plan) return advanceTo(3);
+      return runWithOverlay(
+        ['Reading the module identifiers...', 'Checking which platforms have a readable public surface...',
+         'Filtering login-walled and policy-excluded platforms...', 'Building the source routing plan...'],
+        'Planning the profile fetch. Nothing is called and nothing is spent.',
+        async () => {
+          const res = await raceFetch<Plan>(`${base}/targets`, { method: 'POST' });
+          if (!res.ok || !res.data) return fail(res, 'Could not build the source plan.');
+          setLive((l) => ({ ...l, plan: res.data }));
+          advanceTo(3, mapPlan(res.data));
+          return true;
+        });
     }
 
-    if (messages.length > 0) {
-      triggerProcessingTransition(messages, subtitle, () => {
-        setData((prev) => ({ ...prev, step: nextStep }));
-        setMaxStepReached((prev) => Math.max(prev, nextStep));
-      }, 4200);
-    } else {
-      setData((prev) => ({ ...prev, step: nextStep }));
-      setMaxStepReached((prev) => Math.max(prev, nextStep));
+    if (data.step === 3) {
+      if (live.scrape) return advanceTo(4);
+      const plan = live.plan;
+      if (!plan || plan.ready.length === 0) {
+        setBanner({ msg: 'The plan has no source that is ready to fetch.' });
+        return;
+      }
+      return runWithOverlay(
+        ['Dispatching profile readers to the ready sources...', 'Waiting on each reader to return...',
+         'Judging each result by the fields it returned...'],
+        'Executing the reviewed source plan. This step spends and can take a few minutes.',
+        async () => {
+          const res = await raceFetch<Scrape>(`${base}/scrape`, {
+            method: 'POST', body: { only: plan.ready.map((r) => r.platform) },
+          });
+          if (!res.ok || !res.data) return fail(res, 'The profile fetch failed.');
+          setLive((l) => ({ ...l, scrape: res.data }));
+          advanceTo(4, mapScrape(res.data));
+          return true;
+        });
     }
+
+    if (data.step === 4) {
+      if (live.persona) return advanceTo(5);
+      return runWithOverlay(
+        ['Handing the verified evidence to the persona model...', 'Deriving attributes with a confidence band and a basis line each...',
+         'Computing trait scores...', 'Running the persona audit...'],
+        'Deriving the persona from the stored profile data.',
+        async () => {
+          const res = await raceFetch<any>(`${base}/persona`, { method: 'POST', body: workspaceBody() });
+          if (!res.ok) return fail(res, 'Could not start the persona step.');
+          const p = await pollDone<Persona>(`${base}/persona`);
+          if (cancelled.current) return false;
+          if (!p) { setBanner({ msg: 'The persona step did not finish in time. It may still complete — load this subject again shortly.' }); return false; }
+          if (p.status === 'failed') { setBanner({ msg: p.error ?? 'Persona synthesis failed.' }); return false; }
+          // The payload is the evidence, not the status flag.
+          if (!p.attributeGroups?.some((g) => g.attributes?.length)) {
+            setBanner({ msg: 'The persona came back with no attributes, so it was not accepted.' });
+            return false;
+          }
+          setLive((l) => ({ ...l, persona: p }));
+          advanceTo(5, mapPersona(p));
+          return true;
+        });
+    }
+
+    if (data.step === 5) {
+      if (live.categories) return advanceTo(6);
+      return runWithOverlay(
+        ['Scoring candidate affinity categories...', 'Checking each against the persona evidence...',
+         'Ranking by evidence strength and psychological fit...', 'Recording why each rejected category lost...'],
+        'Ranking categories only. Offers are a separate step.',
+        async () => {
+          const res = await raceFetch<any>(`${base}/categories`, { method: 'POST', body: workspaceBody() });
+          if (!res.ok) return fail(res, 'Could not start the category step.');
+          const c = await pollDone<Categories>(`${base}/categories`);
+          if (cancelled.current) return false;
+          if (!c) { setBanner({ msg: 'The category step did not finish in time. It may still complete — load this subject again shortly.' }); return false; }
+          if (c.status === 'failed') { setBanner({ msg: c.error ?? 'Category derivation failed.' }); return false; }
+          if (!c.topCategories?.length && !c.scoringTable?.length) {
+            setBanner({ msg: 'The category step returned nothing, so it was not accepted.' });
+            return false;
+          }
+          setLive((l) => ({ ...l, categories: c }));
+          advanceTo(6, { ...mapCategories(c), model: c.model });
+          return true;
+        });
+    }
+  };
+
+  const saveWorkspace = async () => {
+    const ws = workspaceInput.trim();
+    if (!ws) return;
+    sessionStorage.setItem('anthropic_workspace_id', ws);
+    await raceFetch('/api/race/config/workspace', { method: 'POST', body: { workspaceId: ws } });
+    setBanner(null);
   };
 
   const handlePrevStep = () => {
@@ -207,12 +309,13 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
   };
 
   const handleStartNewRun = () => {
+    setLive({});
+    setBanner(null);
+    setMaxStepReached(1);
     setData((prev) => ({
-      ...prev,
-      step: 1,
-      isStored: false,
-      email: '',
-      isLawfulConsent: true,
+      ...EMPTY_RUN,
+      sector: prev.sector, ticketPrice: prev.ticketPrice,
+      monthToDateINR: prev.monthToDateINR, vendorSpendINR: estimateINR ?? 0,
     }));
   };
 
@@ -259,8 +362,26 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
           messages={processingMessages}
           subtitle={processingSubtitle}
           intervalMs={4000}
-          onCancel={() => setIsProcessing(false)}
+          onCancel={() => { cancelled.current = true; setIsProcessing(false); }}
         />
+      )}
+
+      {banner && (
+        <div className="rounded-2xl border border-red-200 bg-red-50/70 px-4 py-3 text-xs text-red-800 space-y-1.5">
+          <div className="font-semibold">{banner.msg}</div>
+          {banner.hint && <div className="text-red-700/80">{banner.hint}</div>}
+          {banner.needsWorkspace && (
+            <div className="flex items-center gap-2 pt-1">
+              <input value={workspaceInput} onChange={(e) => setWorkspaceInput(e.target.value)}
+                     placeholder="Anthropic workspace ID"
+                     className="px-3 py-1.5 text-xs bg-white border border-red-200 rounded-lg w-64" />
+              <button type="button" onClick={saveWorkspace}
+                      className="px-3 py-1.5 text-xs font-semibold bg-white border border-red-200 rounded-lg hover:bg-red-100 cursor-pointer">
+                Save, then try again
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Top Header Bar */}

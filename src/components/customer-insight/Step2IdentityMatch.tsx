@@ -67,7 +67,7 @@ export const Step2IdentityMatch: React.FC<Step2IdentityMatchProps> = ({
           </p>
         </div>
         <div className="self-start sm:self-center px-3 py-1.5 bg-emerald-50 border border-emerald-200/80 rounded-full text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
-          <span>✓ Loaded from store · no vendor call</span>
+          <span>{data.isStored ? '✓ Loaded from store · no vendor call' : '✓ Live run · saved to store'}</span>
         </div>
       </div>
 
@@ -144,59 +144,23 @@ export const Step2IdentityMatch: React.FC<Step2IdentityMatchProps> = ({
 
         {/* Stacked Bars */}
         <div className="space-y-4">
-          {/* OSINT Industries */}
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-            <div className="sm:col-span-3 text-xs font-semibold text-neutral-800">
-              OSINT Industries
-            </div>
-            <div className="sm:col-span-9 h-7 bg-neutral-100 rounded-lg overflow-hidden flex text-[11px] font-bold text-white leading-none">
-              <div
-                style={{ width: `${(16 / 47) * 100}%` }}
-                className="bg-[#1e293b] flex items-center justify-center"
-              >
-                16
+          {([['OSINT Industries', data.vendorBreakdown.osint], ['Behind the Email', data.vendorBreakdown.bte]] as const).map(([label, v]) => {
+            const tot = Math.max(1, v.detailed + v.registered + v.breach);
+            const seg = (n: number, cls: string, first = false) => n > 0 ? (
+              <div style={{ width: `${(n / tot) * 100}%` }}
+                   className={`${cls} flex items-center justify-center ${first ? '' : 'border-l border-white/10'}`}>{n}</div>
+            ) : null;
+            return (
+              <div key={label} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                <div className="sm:col-span-3 text-xs font-semibold text-neutral-800">{label}</div>
+                <div className="sm:col-span-9 h-7 bg-neutral-100 rounded-lg overflow-hidden flex text-[11px] font-bold text-white leading-none">
+                  {tot === 1 && v.detailed + v.registered + v.breach === 0
+                    ? <span className="px-3 text-neutral-400 font-medium self-center">no items returned</span>
+                    : <>{seg(v.detailed, 'bg-[#1e293b]', true)}{seg(v.registered, 'bg-[#64748b]')}{seg(v.breach, 'bg-[#c2410c]')}</>}
+                </div>
               </div>
-              <div
-                style={{ width: `${(19 / 47) * 100}%` }}
-                className="bg-[#64748b] flex items-center justify-center border-l border-white/10"
-              >
-                19
-              </div>
-              <div
-                style={{ width: `${(12 / 47) * 100}%` }}
-                className="bg-[#c2410c] flex items-center justify-center border-l border-white/10"
-              >
-                12
-              </div>
-            </div>
-          </div>
-
-          {/* Behind the Email */}
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-            <div className="sm:col-span-3 text-xs font-semibold text-neutral-800">
-              Behind the Email
-            </div>
-            <div className="sm:col-span-9 h-7 bg-neutral-100 rounded-lg overflow-hidden flex text-[11px] font-bold text-white leading-none">
-              <div
-                style={{ width: `${(6 / 47) * 100}%` }}
-                className="bg-[#1e293b] flex items-center justify-center"
-              >
-                6
-              </div>
-              <div
-                style={{ width: `${(4 / 47) * 100}%` }}
-                className="bg-[#64748b] flex items-center justify-center border-l border-white/10"
-              >
-                4
-              </div>
-              <div
-                style={{ width: `${(1 / 47) * 100}%` }}
-                className="bg-[#c2410c] flex items-center justify-center border-l border-white/10"
-              >
-                1
-              </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
 
         {/* Found by both */}
@@ -264,7 +228,7 @@ export const Step2IdentityMatch: React.FC<Step2IdentityMatchProps> = ({
                   : 'text-neutral-500 hover:text-neutral-800'
               }`}
             >
-              Timeline 32
+              Timeline {data.identityStats.timelineEvents ?? 0}
             </button>
           </div>
 

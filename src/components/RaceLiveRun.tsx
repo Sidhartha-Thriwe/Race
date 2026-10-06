@@ -119,7 +119,7 @@ export function useRaceRun() {
   const start = useCallback(async (opts: {
     email: string; sector?: string; ticketBand?: string; useCase?: string;
     vendors?: string[]; screening?: boolean;
-  }) => {
+  }): Promise<Run | null> => {
     setError(null); setHint(null); setRun(null); setBusy(true); setFromStore(false);
     const res = await raceFetch<any>('/api/race/run', {
       method: 'POST',
@@ -135,22 +135,27 @@ export function useRaceRun() {
     });
     if (!res.ok || !res.data) {
       setError(res.error ?? 'request failed'); setHint(res.hint ?? null);
-      setBusy(false); return;
+      setBusy(false); return null;
     }
 
     const { runId, subjectId } = res.data;
     setRun({ runId, subjectId, status: 'running', costINR: 0, vendorsCalled: [], steps: [] });
 
-    timer.current = window.setInterval(async () => {
-      const r = await raceFetch<Run>(`/api/race/runs/${runId}`);
-      if (!r.ok || !r.data) return;
-      setRun(r.data);
-      if (r.data.status !== 'running') {
-        if (timer.current) window.clearInterval(timer.current);
-        setBusy(false);
-        refreshMeta();
-      }
-    }, 2000);
+    // Resolves with the finished run, so a caller can wait on the real work
+    // instead of guessing how long it takes.
+    return new Promise<Run | null>((resolve) => {
+      timer.current = window.setInterval(async () => {
+        const r = await raceFetch<Run>(`/api/race/runs/${runId}`);
+        if (!r.ok || !r.data) return;           // a dropped poll is not a failed run
+        setRun(r.data);
+        if (r.data.status !== 'running') {
+          if (timer.current) window.clearInterval(timer.current);
+          setBusy(false);
+          refreshMeta();
+          resolve(r.data);
+        }
+      }, 2000);
+    });
   }, [refreshMeta]);
 
   return { run, busy, error, hint, storage, subjects, estimateINR, bte,

@@ -57,47 +57,17 @@ export const Step6Categories: React.FC<Step6CategoriesProps> = ({
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-xs space-y-3">
-            <div className="w-8 h-8 rounded-xl bg-neutral-100 flex items-center justify-center text-neutral-700">
-              <Briefcase size={16} />
-            </div>
-            <div>
-              <div className="text-sm font-bold text-neutral-900">
-                Career evidence is dense
+          {categories.whyRanking.map((w, i) => (
+            <div key={i} className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-xs space-y-3">
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${w.icon === 'eye-off' ? 'bg-amber-50 text-amber-700' : 'bg-neutral-100 text-neutral-700'}`}>
+                {w.icon === 'briefcase' ? <Briefcase size={16} /> : w.icon === 'slash' ? <Ban size={16} /> : <EyeOff size={16} />}
               </div>
-              <div className="text-xs text-neutral-500 font-medium mt-0.5">
-                Most signal is professional
+              <div>
+                <div className="text-sm font-bold text-neutral-900">{w.title}</div>
+                <div className="text-xs text-neutral-500 font-medium mt-0.5">{w.subtitle}</div>
               </div>
             </div>
-          </div>
-
-          <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-xs space-y-3">
-            <div className="w-8 h-8 rounded-xl bg-neutral-100 flex items-center justify-center text-neutral-700">
-              <Ban size={16} />
-            </div>
-            <div>
-              <div className="text-sm font-bold text-neutral-900">
-                Spend signal near zero
-              </div>
-              <div className="text-xs text-neutral-500 font-medium mt-0.5">
-                No price-bearing flags
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-xs space-y-3">
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
-              <EyeOff size={16} />
-            </div>
-            <div>
-              <div className="text-sm font-bold text-neutral-900">
-                Leisure side unobserved
-              </div>
-              <div className="text-xs text-neutral-500 font-medium mt-0.5">
-                Unobserved, not absent
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
       </div>
 
@@ -203,16 +173,16 @@ export const Step6Categories: React.FC<Step6CategoriesProps> = ({
         {showSetAside && (
           <div className="pt-4 border-t border-neutral-100 space-y-3">
             <h4 className="text-xs font-bold text-neutral-800">
-              11 Set Aside Categories
+              {categories.setAsideCount} Set Aside Categories
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
               {categories.setAside.map((sa, idx) => (
                 <div
                   key={idx}
-                  className="p-2.5 bg-neutral-50 rounded-xl border border-neutral-200/60 flex items-center justify-between"
+                  className="p-2.5 bg-neutral-50 rounded-xl border border-neutral-200/60 space-y-0.5"
                 >
-                  <span className="font-medium text-neutral-800">{sa.title}</span>
-                  <span className="text-[11px] text-neutral-500">{sa.reason}</span>
+                  <div className="font-medium text-neutral-800">{sa.title}</div>
+                  <div className="text-[11px] text-neutral-500 leading-relaxed">{sa.reason}</div>
                 </div>
               ))}
             </div>

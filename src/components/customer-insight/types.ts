@@ -27,6 +27,7 @@ export interface CustomerInsightRunData {
     detailedProfiles: number;
     registeredOnly: number;
     breachRecords: number;
+    timelineEvents?: number;
   };
   vendorBreakdown: {
     osint: { detailed: number; registered: number; breach: number };
@@ -88,7 +89,9 @@ export interface CustomerInsightRunData {
     attributesCount: number;
     traitsCount: number;
     profilesUsed: number;
-    confidence: { high: number; medium: number; low: number };
+    confidence: { high: number; medium: number; low: number; estimated?: number; insufficient?: number };
+    summary?: string;
+    identityLocation?: string;
     traits: Array<{
       name: string;
       score: number;
@@ -101,7 +104,8 @@ export interface CustomerInsightRunData {
       attributes: Array<{
         label: string;
         value: string;
-        confidence: 'high' | 'medium' | 'low';
+        confidence: 'high' | 'medium' | 'low' | 'estimated' | 'insufficient';
+        basis?: string;
       }>;
       sources: string[];
     }>;

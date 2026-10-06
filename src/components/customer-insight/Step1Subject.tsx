@@ -177,7 +177,7 @@ export const Step1Subject: React.FC<Step1SubjectProps> = ({
                   }}
                   className="w-full appearance-none px-3.5 py-2.5 text-xs font-medium text-neutral-800 bg-white border border-neutral-200 rounded-xl shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-[#1e293b]/20 focus:border-[#1e293b] cursor-pointer"
                 >
-                  <option value="Subject S-01">Subject S-01 (Automobile · ₹10–20L · 42 modules)</option>
+                  <option value="" disabled>{subjects.length ? 'Choose a stored subject' : 'No stored subjects yet'}</option>
                   {subjects.map((s) => (
                     <option key={s.subjectId} value={s.subjectId}>
                       {s.subjectId} · {s.email ?? 'stored profile'}
