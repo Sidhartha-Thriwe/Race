@@ -1,6 +1,5 @@
 import React from 'react';
 import { CustomerInsightRunData } from './types';
-import { Star } from 'lucide-react';
 
 interface Step3SourcePlanProps {
   data: CustomerInsightRunData;
@@ -28,9 +27,6 @@ export const Step3SourcePlan: React.FC<Step3SourcePlanProps> = ({
           <h2 className="text-2xl font-bold tracking-tight text-neutral-900">
             Source plan
           </h2>
-          <p className="text-xs text-neutral-500 font-medium mt-1">
-            Which public profiles can be read, and which cannot.
-          </p>
         </div>
         <div className="self-start sm:self-center px-3 py-1.5 bg-neutral-100 border border-neutral-200/80 rounded-full text-xs font-semibold text-neutral-600 flex items-center gap-1.5">
           <span>Plan only · nothing called, nothing spent</span>
@@ -63,7 +59,7 @@ export const Step3SourcePlan: React.FC<Step3SourcePlanProps> = ({
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-[#d97706]" />
-                  <span>{sourcePlan.blockedCount} Blocked</span>
+                  <span>{sourcePlan.blockedCount} Skipped</span>
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-[#cbd5e1]" />
@@ -123,17 +119,6 @@ export const Step3SourcePlan: React.FC<Step3SourcePlanProps> = ({
                     </div>
                   </div>
 
-                  <span
-                    className={`px-2.5 py-0.5 text-[11px] font-semibold rounded-full capitalize ${
-                      src.status === 'verified'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
-                        : src.status === 'contested'
-                        ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
-                        : 'bg-neutral-100 text-neutral-600'
-                    }`}
-                  >
-                    {src.status}
-                  </span>
                 </div>
 
                 {/* Built From Pills */}
@@ -148,26 +133,6 @@ export const Step3SourcePlan: React.FC<Step3SourcePlanProps> = ({
                     </span>
                   ))}
                 </div>
-
-                {/* Extra Flags & Inputs */}
-                {(src.flag || src.hasViewInput) && (
-                  <div className="pt-2 border-t border-neutral-100 flex items-center justify-between text-xs">
-                    {src.flag && (
-                      <span className="flex items-center gap-1 text-amber-700 font-medium text-[11px]">
-                        <Star size={12} className="text-amber-500 fill-amber-500" />
-                        <span>{src.flag}</span>
-                      </span>
-                    )}
-                    {src.hasViewInput && (
-                      <button
-                        type="button"
-                        className="text-[11px] font-semibold text-neutral-600 hover:text-neutral-900 ml-auto cursor-pointer"
-                      >
-                        View input
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -177,7 +142,7 @@ export const Step3SourcePlan: React.FC<Step3SourcePlanProps> = ({
         <div className="lg:col-span-5 bg-white border border-neutral-200/80 rounded-2xl p-6 shadow-xs space-y-6">
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-neutral-900">
-              Why {sourcePlan.blockedCount} are blocked
+              Why {sourcePlan.blockedCount} are skipped
             </h3>
 
             <div className="space-y-3">
