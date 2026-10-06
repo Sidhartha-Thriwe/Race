@@ -19,36 +19,39 @@ export interface GeneratingOrbProps {
   className?: string;
 }
 
-const DEFAULT_MESSAGES = [
-  'Resolving identity across intelligence sources...',
-  'Auditing public domain footprints & graph...',
-  'Indexing registered profiles & telemetry...',
-  'Analyzing behavioral propensities & spend fit...',
-  'Synthesizing psychographic persona models...',
-  'Calibrating affinity category rankings...',
-  'Finalizing intelligence bundle...'
+/**
+ * The rotating line is filler on purpose. It says the system is busy, not what
+ * it is doing — a line naming a step would be a claim about the work that the
+ * screen has no way to back up.
+ */
+const FILLER = [
+  'Thinking hard…',
+  'Contemplating…',
+  'Connecting the dots…',
+  'Reading between the lines…',
+  'Mulling it over…',
+  'Weighing it up…',
+  'Piecing it together…',
+  'Pondering…',
 ];
+const FILLER_MS = 2600;
 
 export const GeneratingOrb: React.FC<GeneratingOrbProps> = ({
-  messages = DEFAULT_MESSAGES,
-  subtitle = 'Please wait while live data is verified and computed.',
-  intervalMs = 4000,
+  // `messages`, `subtitle` and `intervalMs` are accepted for compatibility and ignored.
   size = 260,
   isOverlay = false,
   onCancel,
   className = '',
 }) => {
-  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [currentIndex, setCurrentIndex] = useState<number>(() => Math.floor(Math.random() * FILLER.length));
+  const messages = FILLER;
 
-  // Message rotation effect every 4 seconds
   useEffect(() => {
-    if (!messages || messages.length === 0) return;
     const timer = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % messages.length);
-    }, intervalMs);
-
+      setCurrentIndex((prev) => (prev + 1) % FILLER.length);
+    }, FILLER_MS);
     return () => clearInterval(timer);
-  }, [messages, intervalMs]);
+  }, []);
 
   const content = (
     <div className={`flex flex-col items-center justify-center text-center select-none ${className}`}>
@@ -69,11 +72,6 @@ export const GeneratingOrb: React.FC<GeneratingOrbProps> = ({
           </motion.div>
         </AnimatePresence>
 
-        {subtitle && (
-          <p className="text-xs text-neutral-500 font-medium mt-1.5 leading-relaxed">
-            {subtitle}
-          </p>
-        )}
       </div>
 
       {/* Optional Cancel affordance */}
