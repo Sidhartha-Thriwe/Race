@@ -25,7 +25,7 @@ export const Step3SourcePlan: React.FC<Step3SourcePlanProps> = ({
             STEP 3 OF 6
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-neutral-900">
-            Source plan
+            Strategy building
           </h2>
         </div>
         <div className="self-start sm:self-center px-3 py-1.5 bg-neutral-100 border border-neutral-200/80 rounded-full text-xs font-semibold text-neutral-600 flex items-center gap-1.5">
@@ -205,7 +205,7 @@ export const Step3SourcePlan: React.FC<Step3SourcePlanProps> = ({
           disabled={busy}
           className="px-6 py-2.5 text-xs font-semibold text-white bg-[#1e293b] hover:bg-[#0f172a] rounded-xl shadow-xs transition-colors cursor-pointer"
         >
-          Fetch {sourcePlan.readyCount} profiles
+          Run Getting Data
         </button>
       </div>
     </div>

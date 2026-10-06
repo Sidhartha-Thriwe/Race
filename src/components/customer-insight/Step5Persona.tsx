@@ -157,7 +157,7 @@ export const Step5Persona: React.FC<Step5PersonaProps> = ({ data, onBack, onNext
           <div className="text-[11px] font-mono uppercase tracking-widest text-neutral-400 font-semibold mb-1">
             STEP 5 OF 6
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-neutral-900">Persona</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-neutral-900">Persona Building</h2>
           <p className="text-xs text-neutral-500 font-medium mt-1">
             Attributes found in the data, and the traits computed from them.
           </p>
@@ -335,7 +335,7 @@ export const Step5Persona: React.FC<Step5PersonaProps> = ({ data, onBack, onNext
             disabled={busy}
             className="px-6 py-2.5 text-xs font-semibold text-white bg-[#1e293b] hover:bg-[#0f172a] rounded-xl shadow-xs transition-colors cursor-pointer"
           >
-            Find preferred areas
+            Run Preferred Areas
           </button>
         </div>
       </div>

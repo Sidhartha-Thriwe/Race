@@ -38,7 +38,7 @@ export const Step4ProfileFetch: React.FC<Step4ProfileFetchProps> = ({
             STEP 4 OF 6
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-neutral-900">
-            Enriched Data
+            Getting Data
           </h2>
           <p className="text-xs text-neutral-500 font-medium mt-1">
             What each public profile actually returned.
@@ -191,7 +191,7 @@ export const Step4ProfileFetch: React.FC<Step4ProfileFetchProps> = ({
             disabled={busy}
             className="px-6 py-2.5 text-xs font-semibold text-white bg-[#1e293b] hover:bg-[#0f172a] rounded-xl shadow-xs transition-colors cursor-pointer"
           >
-            Build persona
+            Run Persona Building
           </button>
         </div>
       </div>

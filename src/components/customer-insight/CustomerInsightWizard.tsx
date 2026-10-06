@@ -112,7 +112,26 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
   };
 
   // ---------------------------------------------------------------- step 1
-  const handleRunIdentityMatch = () => runWithOverlay(
+  // Model → sources. Pluto calls one source, Earth calls both. Jupiter is admin-only
+  // and cannot be chosen here.
+  const TIER_VENDORS: Record<'pluto' | 'earth', string[]> = {
+    pluto: ['behind_the_email'],
+    earth: ['osint_industries', 'behind_the_email'],
+  };
+  const SOURCE_NAME: Record<string, string> = { osint_industries: 'Source 1', behind_the_email: 'Source 2' };
+  const wantedVendors = TIER_VENDORS[data.tier === 'pluto' ? 'pluto' : 'earth'];
+
+  const handleRunIdentityMatch = () => {
+    const missing = configuredVendors.length > 0
+      ? wantedVendors.filter((v) => !configuredVendors.includes(v)) : [];
+    if (missing.length) {
+      setBanner({ msg: `${missing.map((v) => SOURCE_NAME[v] ?? v).join(' and ')} is not configured on the server, so the ${data.tier === 'pluto' ? 'Pluto' : 'Earth'} model cannot run.` });
+      return Promise.resolve();
+    }
+    return runSourcing();
+  };
+
+  const runSourcing = () => runWithOverlay(
     [
       'Connecting to Source 1 & Source 2...',
       'Verifying domain routing & email hash...',
@@ -127,7 +146,7 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
         sector: data.sector,
         ticketBand: data.ticketPrice,
         useCase: 'customer_insight',
-        vendors: configuredVendors.length > 0 ? configuredVendors : ['osint', 'bte'],
+        vendors: wantedVendors,
       });
       if (cancelled.current) return false;
       if (!finished) {
@@ -142,7 +161,7 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
       setData((prev) => ({
         ...EMPTY_RUN,
         sector: prev.sector, ticketPrice: prev.ticketPrice, isLawfulConsent: prev.isLawfulConsent,
-        monthToDateINR: prev.monthToDateINR, isStored: false,
+        tier: prev.tier, monthToDateINR: prev.monthToDateINR, isStored: false,
         ...mapRun(finished, prev.email), step: 2,
       }));
       setMaxStepReached(2);
@@ -314,7 +333,7 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
     setMaxStepReached(1);
     setData((prev) => ({
       ...EMPTY_RUN,
-      sector: prev.sector, ticketPrice: prev.ticketPrice,
+      sector: prev.sector, ticketPrice: prev.ticketPrice, tier: prev.tier,
       monthToDateINR: prev.monthToDateINR, vendorSpendINR: estimateINR ?? 0,
     }));
   };
@@ -323,27 +342,27 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
   const wizardSteps = [
     {
       num: 1,
-      title: 'Subject',
+      title: 'Configure',
       subtitle: data.step > 1 ? `${data.sector} · ${data.ticketPrice}` : 'Sector and contact',
     },
     {
       num: 2,
-      title: 'Identity match',
-      subtitle: data.step >= 2 ? `${data.identityStats.modulesFound} modules found` : 'Two sources',
+      title: 'Sourcing',
+      subtitle: data.step >= 2 ? `${data.identityStats.modulesFound} modules found` : data.tier === 'pluto' ? 'One source' : 'Two sources',
     },
     {
       num: 3,
-      title: 'Source plan',
+      title: 'Strategy building',
       subtitle: data.step >= 3 ? `${data.sourcePlan.readyCount} ready to fetch` : 'Plan only, free',
     },
     {
       num: 4,
-      title: 'Enriched Data',
+      title: 'Getting Data',
       subtitle: data.step >= 4 ? `${data.profileFetch.usable} of ${data.sourcePlan.readyCount} usable` : 'Public profiles',
     },
     {
       num: 5,
-      title: 'Persona',
+      title: 'Persona Building',
       subtitle: data.step >= 5 ? `${data.persona.attributesCount} attributes · ${data.persona.traitsCount} traits` : 'Attributes and traits',
     },
     {

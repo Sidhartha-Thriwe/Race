@@ -310,7 +310,7 @@ export function mapCategories(c: Categories): Patch {
 /** A blank run: nothing from any earlier subject, nothing invented. */
 export const EMPTY_RUN: CustomerInsightRunData = {
   step: 1, sector: 'Automobile', ticketPrice: '₹10–20L', subjectId: '', email: '',
-  isStored: false, isLawfulConsent: true,
+  isStored: false, isLawfulConsent: true, tier: 'earth',
   vendorSpendINR: 0, monthToDateINR: 0, fetchSpendUSD: 0, model: '',
   identityStats: { modulesFound: 0, detailedProfiles: 0, registeredOnly: 0, breachRecords: 0, timelineEvents: 0 },
   vendorBreakdown: {

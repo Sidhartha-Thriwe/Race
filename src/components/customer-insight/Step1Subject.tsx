@@ -38,7 +38,7 @@ export const Step1Subject: React.FC<Step1SubjectProps> = ({
           STEP 1 OF 6
         </div>
         <h2 className="text-2xl font-bold tracking-tight text-neutral-900">
-          Start a Customer Insight run
+          Configure
         </h2>
         <p className="text-xs text-neutral-500 font-medium mt-1">
           Pick the sector, then add a contact or load a stored subject.
@@ -48,7 +48,7 @@ export const Step1Subject: React.FC<Step1SubjectProps> = ({
       {/* Main Grid: Form + Run Estimate */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Form Card */}
-        <div className="lg:col-span-8 bg-white border border-neutral-200/80 rounded-2xl p-6 shadow-xs space-y-6">
+        <div className="lg:col-span-12 bg-white border border-neutral-200/80 rounded-2xl p-6 shadow-xs space-y-6">
           {/* Row 1: Sector & Ticket Price */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -148,6 +148,49 @@ export const Step1Subject: React.FC<Step1SubjectProps> = ({
                 />
               </div>
 
+              {/* Model: how many sources the run calls */}
+              <div className="space-y-1.5">
+                <span className="block text-xs font-semibold text-neutral-700">Model</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5" role="radiogroup" aria-label="Model">
+                  {([
+                    { id: 'pluto', name: 'Pluto', hint: '1 source', locked: false },
+                    { id: 'earth', name: 'Earth', hint: '2 sources', locked: false },
+                    { id: 'jupiter', name: 'Jupiter', hint: 'Needs admin access', locked: true },
+                  ] as const).map((m) => {
+                    const selected = data.tier === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        disabled={m.locked}
+                        onClick={() => onUpdate({ tier: m.id })}
+                        className={`text-left px-3.5 py-2.5 rounded-xl border transition-all ${
+                          m.locked
+                            ? 'bg-neutral-50 border-neutral-200/70 text-neutral-400 cursor-not-allowed'
+                            : selected
+                            ? 'bg-white border-[#1e293b] ring-2 ring-[#1e293b]/10 cursor-pointer'
+                            : 'bg-white border-neutral-200 hover:border-neutral-300 cursor-pointer'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`text-xs font-bold ${m.locked ? 'text-neutral-400' : 'text-neutral-900'}`}>{m.name}</span>
+                          <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
+                            selected ? 'border-[#1e293b]' : 'border-neutral-300'
+                          }`}>
+                            {selected && <span className="w-1.5 h-1.5 rounded-full bg-[#1e293b]" />}
+                          </span>
+                        </div>
+                        <div className={`text-[11px] font-medium mt-0.5 ${m.locked ? 'text-amber-600' : 'text-neutral-500'}`}>
+                          {m.hint}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Lawful consent check */}
               <label className="flex items-center gap-3 p-3.5 bg-neutral-50/80 border border-neutral-200/60 rounded-xl cursor-pointer hover:bg-neutral-50 transition-colors">
                 <input
@@ -214,50 +257,12 @@ export const Step1Subject: React.FC<Step1SubjectProps> = ({
                 <span>
                   {data.isStored
                     ? 'Load stored subject · free'
-                    : `Run identity match · ₹${data.vendorSpendINR.toFixed(2)}`}
+                    : 'Run Sourcing'}
                 </span>
               )}
             </button>
             <span className="text-xs text-neutral-500 font-medium">
               About 3–4 minutes end to end
-            </span>
-          </div>
-        </div>
-
-        {/* Right Run Estimate Card */}
-        <div className="lg:col-span-4 bg-white border border-neutral-200/80 rounded-2xl p-6 shadow-xs space-y-5">
-          <div className="text-[11px] font-mono uppercase tracking-wider text-neutral-400 font-bold">
-            RUN ESTIMATE
-          </div>
-          
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold tracking-tight text-neutral-900 tabular-nums">
-              ₹{data.vendorSpendINR.toFixed(2)}
-            </span>
-            <span className="text-xs text-neutral-500 font-medium">
-              per new contact
-            </span>
-          </div>
-
-          <div className="space-y-3 pt-2 border-t border-neutral-100">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-neutral-800">Source 1</span>
-              <span className="px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/60 rounded-full">
-                Connected
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-neutral-800">Source 2</span>
-              <span className="px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/60 rounded-full">
-                Key verified
-              </span>
-            </div>
-          </div>
-
-          <div className="p-3 bg-neutral-50/90 border border-neutral-200/60 rounded-xl flex items-start gap-2 text-xs text-neutral-600 font-medium leading-relaxed">
-            <span className="text-neutral-400 font-bold shrink-0">ⓘ</span>
-            <span>
-              Stored subjects load free. Nothing is called and nothing is billed.
             </span>
           </div>
         </div>

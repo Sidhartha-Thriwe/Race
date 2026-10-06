@@ -14,6 +14,8 @@ export interface CustomerInsightRunData {
   email: string;
   isStored: boolean;
   isLawfulConsent: boolean;
+  /** Which sources a run calls: pluto = one, earth = both, jupiter = admin only. */
+  tier: 'pluto' | 'earth' | 'jupiter';
   
   // Costs & Telemetry
   vendorSpendINR: number;
@@ -148,6 +150,7 @@ export const SAMPLE_S01_DATA: CustomerInsightRunData = {
   email: 'prospect@enterprise.com',
   isStored: true,
   isLawfulConsent: true,
+  tier: 'earth',
   
   vendorSpendINR: 62.88,
   monthToDateINR: 62.88,

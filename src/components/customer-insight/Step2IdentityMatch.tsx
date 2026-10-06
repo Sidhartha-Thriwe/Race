@@ -62,7 +62,7 @@ export const Step2IdentityMatch: React.FC<Step2IdentityMatchProps> = ({
             STEP 2 OF 6
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-neutral-900">
-            Identity match
+            Sourcing
           </h2>
           <p className="text-xs text-neutral-500 font-medium mt-1">
             Where this contact has a footprint, merged across both vendors.
@@ -328,7 +328,7 @@ export const Step2IdentityMatch: React.FC<Step2IdentityMatchProps> = ({
           disabled={busy}
           className="px-6 py-2.5 text-xs font-semibold text-white bg-[#1e293b] hover:bg-[#0f172a] rounded-xl shadow-xs transition-colors cursor-pointer"
         >
-          Build source plan · free
+          Run Strategy building
         </button>
       </div>
     </div>
