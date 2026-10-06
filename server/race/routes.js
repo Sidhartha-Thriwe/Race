@@ -1,0 +1,551 @@
+import { Router } from "express";
+import {
+  configuredVendors,
+  osintCredits,
+  bteVersion,
+  VENDORS
+} from "./vendors.js";
+import {
+  resolveSubjectId,
+  subjectIndex,
+  subjectSummaries,
+  ledgerSnapshot,
+  newRunId,
+  hashEmail,
+  saveRun,
+  listRuns,
+  getRun,
+  dataDir
+} from "./store.js";
+import { normaliseWithSkill, skillConfigured } from "./claude.js";
+import {
+  storeInfo,
+  putTargets,
+  fetchTargets,
+  putScrape,
+  fetchScrape,
+  putPersona,
+  fetchPersona,
+  putCategories,
+  fetchCategories,
+  loadWorkspaceId,
+  saveWorkspaceId
+} from "./db.js";
+import { buildPersona, personaConfigured } from "./persona.js";
+import { deriveCategories, categoriesConfigured } from "./categories.js";
+import { runScrape } from "./scrape.js";
+import { apifyConfigured } from "./apify.js";
+import { planTargets } from "./targets.js";
+import { fetchStage } from "./pipeline.js";
+import { summarise } from "./summary.js";
+import { extractViews, viewsToCsv } from "./extract.js";
+let warnedOpen = false;
+const json = (fn) => async (req, res) => {
+  try {
+    await fn(req, res);
+  } catch (e) {
+    const message = `${e?.name ?? "Error"}: ${e?.message ?? String(e)}`;
+    console.error("[race] route failed:", message);
+    const isWorkspaceError = Boolean(
+      e?.needsWorkspaceId || /anthropic-workspace-id|workspace/i.test(message)
+    );
+    if (!res.headersSent) {
+      res.status(isWorkspaceError ? 400 : e?.status || 500).json({
+        error: isWorkspaceError ? "Anthropic Workspace ID required: This API key is an organization-level key. Please provide your Workspace ID (e.g. wrkspc_...)." : message,
+        hint: isWorkspaceError ? "Log in to platform.claude.com \u2192 Settings \u2192 Workspaces to copy your Workspace ID, then provide it in the input below." : /permission|denied/i.test(message) ? "Firestore refused the operation \u2014 a collection used here is probably missing from firestore.rules." : void 0,
+        needsWorkspaceId: isWorkspaceError
+      });
+    }
+  }
+};
+function withViews(run) {
+  if (run?.views) return run;
+  if (!run?.raw) return run;
+  return { ...run, views: extractViews(run.raw), viewsDerivedOnRead: true };
+}
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+function vetEmail(raw) {
+  if (typeof raw !== "string") return { ok: false, error: "email is required" };
+  const email = raw.normalize("NFKC").trim();
+  if (!email) return { ok: false, error: "email is required" };
+  if (/\s/.test(email)) return { ok: false, error: "email contains whitespace" };
+  if (/[^\x20-\x7E]/.test(email)) {
+    return { ok: false, error: "email contains a non-ASCII or invisible character \u2014 retype it rather than pasting" };
+  }
+  if (/xn--/i.test(email)) {
+    return { ok: false, error: "email domain is punycode (xn--), which usually means a stray character slipped in" };
+  }
+  if (!EMAIL_RE.test(email)) return { ok: false, error: "that is not a valid email address" };
+  return { ok: true, email: email.toLowerCase() };
+}
+function requireToken(req, res, next) {
+  const expected = process.env.RACE_ADMIN_TOKEN;
+  if (!expected) {
+    if (!warnedOpen) {
+      warnedOpen = true;
+      console.warn("[race] /api/race/* is OPEN \u2014 RACE_ADMIN_TOKEN is not set. Anyone with the URL can spend vendor credits and read stored records.");
+    }
+    return next();
+  }
+  const given = req.get("x-race-token") ?? "";
+  if (given.length !== expected.length || given !== expected) {
+    return res.status(401).json({ error: "bad or missing x-race-token" });
+  }
+  next();
+}
+function raceRouter() {
+  const r = Router();
+  r.use(requireToken);
+  r.get("/status", json(async (_req, res) => {
+    const skill = skillConfigured();
+    res.json({
+      skill: {
+        ok: skill.ok,
+        reason: skill.reason,
+        skillId: process.env.RACE_SKILL_ID ? "set" : "missing",
+        skillVersion: process.env.RACE_SKILL_VERSION || null,
+        model: process.env.RACE_MODEL ?? "claude-opus-5"
+      },
+      vendors: Object.keys(VENDORS).map((v) => ({
+        vendor: v,
+        configured: configuredVendors().includes(v),
+        costINR: VENDORS[v].costINR,
+        monthlyCap: VENDORS[v].monthlyCap
+      })),
+      apify: { configured: apifyConfigured() },
+      persona: { ...personaConfigured(), model: process.env.RACE_PERSONA_MODEL ?? "claude-sonnet-5" },
+      categories: {
+        ...categoriesConfigured(),
+        model: process.env.RACE_CATEGORIES_MODEL ?? process.env.RACE_PERSONA_MODEL ?? "claude-sonnet-5"
+      },
+      osintCredits: await osintCredits(),
+      bte: await bteVersion(),
+      ledger: await ledgerSnapshot(),
+      storage: storeInfo(),
+      dataDir: dataDir(),
+      keepRaw: process.env.RACE_KEEP_RAW !== "false",
+      accessControl: process.env.RACE_ADMIN_TOKEN ? "token required" : "OPEN \u2014 no token set",
+      note: storeInfo().backend === "firestore" ? "Run records are in Firestore and survive redeploys." : "Firestore is not reachable, so records are on the container filesystem \u2014 which on Cloud Run is wiped by a redeploy or scale-to-zero. Export before it matters."
+    });
+  }));
+  r.post("/run", json(async (req, res) => {
+    const {
+      email,
+      useCase = "customer_insight",
+      sector,
+      ticketBand,
+      vendors,
+      consentBasis,
+      normalise = false,
+      screening = false
+    } = req.body ?? {};
+    if (normalise) {
+      const skill = skillConfigured();
+      if (!skill.ok) return res.status(503).json({ error: skill.reason });
+    }
+    const vetted = vetEmail(email);
+    if (!vetted.ok || !vetted.email) {
+      return res.status(400).json({ error: vetted.error ?? "invalid email" });
+    }
+    if (typeof consentBasis !== "string" || consentBasis.trim().length < 3) {
+      return res.status(400).json({
+        error: "`consentBasis` is required \u2014 a short string naming the lawful basis for resolving this person (e.g. 'opt-in: internal employee demo, consent collected 2026-09-12'). It is stored with the run."
+      });
+    }
+    if (vendors !== void 0) {
+      if (!Array.isArray(vendors) || vendors.some((v) => !(v in VENDORS))) {
+        return res.status(400).json({
+          error: `vendors must be a subset of ${Object.keys(VENDORS).join(", ")}`
+        });
+      }
+    }
+    const address = vetted.email;
+    const subjectId = await resolveSubjectId(address);
+    const runId = newRunId();
+    const record = {
+      runId,
+      subjectId,
+      emailHash: hashEmail(address),
+      ...process.env.RACE_LOG_EMAIL === "true" ? { email: address } : {},
+      useCase,
+      sector,
+      ticketBand,
+      ...screening ? { screening: true } : {},
+      startedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      status: "running",
+      vendorsCalled: [],
+      costINR: 0,
+      skillId: process.env.RACE_SKILL_ID,
+      skillVersion: process.env.RACE_SKILL_VERSION,
+      model: process.env.RACE_MODEL ?? "claude-opus-5",
+      steps: [{
+        t: (/* @__PURE__ */ new Date()).toISOString(),
+        level: "info",
+        msg: "Run accepted",
+        detail: { consentBasis: consentBasis.trim() }
+      }]
+    };
+    await saveRun(record);
+    res.status(202).json({ runId, subjectId, status: "running" });
+    try {
+      const fetched = await fetchStage({
+        email: address,
+        useCase,
+        ticketBand,
+        explicitVendors: vendors
+      });
+      const afterFetch = {
+        ...record,
+        vendorsCalled: fetched.vendorsCalled,
+        costINR: fetched.costINR,
+        steps: [...record.steps, ...fetched.steps],
+        raw: fetched.raw
+      };
+      const summary = summarise(fetched.raw);
+      const views = extractViews(fetched.raw);
+      if (!normalise) {
+        await saveRun({
+          ...afterFetch,
+          summary,
+          views,
+          status: fetched.empty ? "failed" : "completed",
+          finishedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          ...fetched.empty ? { error: "no vendor returned any items" } : {}
+        });
+        return;
+      }
+      if (fetched.empty) {
+        await saveRun({
+          ...afterFetch,
+          status: "failed",
+          finishedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          error: "no vendor returned any items"
+        });
+        return;
+      }
+      const out = await normaliseWithSkill({
+        subjectId,
+        email: address,
+        useCase,
+        sector,
+        ticketBand,
+        raw: fetched.raw,
+        vendorsAttempted: fetched.vendorsCalled
+      });
+      await saveRun({
+        ...afterFetch,
+        summary,
+        views,
+        status: out.intake ? "completed" : "failed",
+        finishedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        usage: out.usage,
+        steps: [...afterFetch.steps, ...out.steps],
+        intake: out.intake,
+        ...out.intake ? {} : { error: "no intake record in the final reply" }
+      });
+    } catch (e) {
+      await saveRun({
+        ...record,
+        status: "failed",
+        finishedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        error: `${e?.name ?? "Error"}: ${e?.message ?? String(e)}`,
+        steps: [...record.steps, {
+          t: (/* @__PURE__ */ new Date()).toISOString(),
+          level: "error",
+          msg: "Run threw",
+          detail: String(e?.message ?? e)
+        }]
+      });
+    }
+  }));
+  r.get("/runs", json(async (req, res) => {
+    const limit = Math.min(Number(req.query.limit ?? 50) || 50, 500);
+    res.json({ runs: await listRuns(limit) });
+  }));
+  r.get("/runs/:id", json(async (req, res) => {
+    const run = await getRun(req.params.id);
+    if (!run) return res.status(404).json({ error: "no such run" });
+    res.json(withViews(run));
+  }));
+  r.get("/runs/:id/csv/:file?", json(async (req, res) => {
+    const run = await getRun(req.params.id);
+    if (!run) return res.status(404).json({ error: "no such run" });
+    const files = viewsToCsv(withViews(run).views);
+    if (!req.params.file) return res.json({ files: Object.keys(files) });
+    const body = files[req.params.file];
+    if (body === void 0) {
+      return res.status(404).json({ error: "no such view", available: Object.keys(files) });
+    }
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${req.params.file}"`);
+    res.send(body);
+  }));
+  r.get("/by-email/:email", json(async (req, res) => {
+    const address = decodeURIComponent(req.params.email).trim().toLowerCase();
+    const map = await subjectIndex();
+    const subjectId = map.byEmail[address];
+    if (!subjectId) return res.status(404).json({ error: "no run for that address yet" });
+    const hash = hashEmail(address);
+    const index = await listRuns(500);
+    const latest = index.find((r2) => r2.emailHash === hash);
+    if (!latest) return res.json({ subjectId, email: address, run: null });
+    res.json({ subjectId, email: address, run: await getRun(latest.runId) });
+  }));
+  r.get("/export", json(async (_req, res) => {
+    const index = await listRuns(500);
+    const runs = [];
+    for (const row of index) {
+      const full = await getRun(row.runId);
+      if (full) runs.push(withViews(full));
+    }
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="race-export-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.json"`
+    );
+    res.json({
+      exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      storage: storeInfo(),
+      subjects: await subjectIndex(),
+      runs
+    });
+  }));
+  r.post("/subjects/:subjectId/targets", json(async (req, res) => {
+    const subjectId = String(req.params.subjectId).trim();
+    if (!/^P-\d{2,}$/.test(subjectId)) {
+      return res.status(400).json({ error: "subjectId must look like P-20" });
+    }
+    const index = await listRuns(500);
+    const row = index.find((r2) => r2.subjectId === subjectId && r2.status === "completed" && !r2.screening);
+    if (!row) {
+      return res.status(409).json({
+        error: `no completed step 1 run for ${subjectId} \u2014 run step 1 first`
+      });
+    }
+    const run = await getRun(row.runId);
+    if (!run?.raw) {
+      return res.status(409).json({
+        error: "that run has no stored payload, so there is nothing to plan against"
+      });
+    }
+    const plan = planTargets({
+      subjectId,
+      emailHash: run.emailHash,
+      email: run.email,
+      sourceRunId: run.runId,
+      raw: run.raw
+    });
+    const storedIn = await putTargets(subjectId, plan);
+    res.json({ ...plan, storedIn });
+  }));
+  r.post("/subjects/:subjectId/scrape", json(async (req, res) => {
+    const subjectId = String(req.params.subjectId).trim();
+    if (!/^P-\d{2,}$/.test(subjectId)) {
+      return res.status(400).json({ error: "subjectId must look like P-20" });
+    }
+    if (!apifyConfigured()) {
+      return res.status(503).json({ error: "APIFY_TOKEN is not set" });
+    }
+    const plan = await fetchTargets(subjectId);
+    if (!plan) return res.status(409).json({ error: "no step 2 plan \u2014 run step 2 first" });
+    if (!plan.ready?.length) {
+      return res.status(409).json({ error: "the plan has no ready actors to run" });
+    }
+    const only = Array.isArray(req.body?.only) ? req.body.only : [];
+    const result = await runScrape({
+      subjectId,
+      emailHash: plan.emailHash,
+      email: plan.email,
+      plan,
+      only
+    });
+    const storedIn = await putScrape(subjectId, result);
+    res.json({ ...result, storedIn });
+  }));
+  r.get("/subjects/:subjectId/scrape", json(async (req, res) => {
+    const scrape = await fetchScrape(String(req.params.subjectId).trim());
+    if (!scrape) return res.status(404).json({ error: "no scrape yet \u2014 run step 3" });
+    res.json(scrape);
+  }));
+  r.post("/subjects/:subjectId/persona", json(async (req, res) => {
+    const subjectId = String(req.params.subjectId).trim();
+    if (!/^P-\d{2,}$/.test(subjectId)) {
+      return res.status(400).json({ error: "subjectId must look like P-20" });
+    }
+    const cfg = personaConfigured();
+    if (!cfg.ok) return res.status(503).json({ error: cfg.reason });
+    const index = await listRuns(500);
+    const row = index.find((r2) => r2.subjectId === subjectId && r2.status === "completed" && !r2.screening);
+    if (!row) return res.status(409).json({ error: "no completed step 1 run for this subject" });
+    const run = withViews(await getRun(row.runId));
+    if (!run?.views) return res.status(409).json({ error: "that run has no views to reason from" });
+    const incomingWorkspace = req.headers["x-anthropic-workspace-id"]?.trim() || req.body?.workspaceId?.trim();
+    if (incomingWorkspace) {
+      await saveWorkspaceId(incomingWorkspace);
+    }
+    const startedAt = (/* @__PURE__ */ new Date()).toISOString();
+    await putPersona(subjectId, {
+      subjectId,
+      model: process.env.RACE_PERSONA_MODEL ?? "claude-sonnet-5",
+      status: "running",
+      startedAt,
+      attributeGroups: [],
+      audit: { attributes: 0, byBand: {}, weakBasisLines: 0, identityScrubbed: 0 },
+      steps: [{ t: startedAt, level: "info", msg: "Persona synthesis started" }]
+    });
+    res.status(202).json({ subjectId, status: "running", startedAt });
+    try {
+      const persona = await buildPersona({
+        subjectId,
+        useCase: run.useCase,
+        sector: run.sector,
+        ticketBand: run.ticketBand,
+        views: run.views,
+        plan: await fetchTargets(subjectId),
+        scrape: await fetchScrape(subjectId),
+        workspaceId: incomingWorkspace
+      });
+      await putPersona(subjectId, { ...persona, status: "completed", startedAt });
+    } catch (e) {
+      const message = `${e?.name ?? "Error"}: ${e?.message ?? String(e)}`;
+      console.error("[race] persona failed:", message);
+      await putPersona(subjectId, {
+        subjectId,
+        model: process.env.RACE_PERSONA_MODEL ?? "claude-sonnet-5",
+        status: "failed",
+        startedAt,
+        finishedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        error: message,
+        attributeGroups: [],
+        audit: { attributes: 0, byBand: {}, weakBasisLines: 0, identityScrubbed: 0 },
+        steps: [{ t: (/* @__PURE__ */ new Date()).toISOString(), level: "error", msg: message }]
+      });
+    }
+  }));
+  r.post("/subjects/:subjectId/categories", json(async (req, res) => {
+    const subjectId = String(req.params.subjectId).trim();
+    if (!/^P-\d{2,}$/.test(subjectId)) {
+      return res.status(400).json({ error: "subjectId must look like P-20" });
+    }
+    const cfg = categoriesConfigured();
+    if (!cfg.ok) return res.status(503).json({ error: cfg.reason });
+    const persona = await fetchPersona(subjectId);
+    if (!persona || persona.status === "running" || persona.status === "failed" || !(persona.attributeGroups ?? []).length) {
+      return res.status(409).json({ error: "no completed persona for this subject \u2014 run step 4" });
+    }
+    const index = await listRuns(500);
+    const row = index.find((r2) => r2.subjectId === subjectId && r2.status === "completed" && !r2.screening);
+    if (!row) return res.status(409).json({ error: "no completed step 1 run for this subject" });
+    const run = withViews(await getRun(row.runId));
+    if (!run?.views) return res.status(409).json({ error: "that run has no views to reason from" });
+    const incomingWorkspace = req.headers["x-anthropic-workspace-id"]?.trim() || req.body?.workspaceId?.trim();
+    if (incomingWorkspace) {
+      await saveWorkspaceId(incomingWorkspace);
+    }
+    const model = process.env.RACE_CATEGORIES_MODEL ?? process.env.RACE_PERSONA_MODEL ?? "claude-sonnet-5";
+    const startedAt = (/* @__PURE__ */ new Date()).toISOString();
+    const emptyAudit = {
+      candidates: 0,
+      ranked: 0,
+      deprioritised: 0,
+      byRejectionRule: {},
+      dormantFound: false,
+      identityScrubbed: 0,
+      offerFieldsRemoved: 0,
+      priceMentions: 0,
+      thinJustifications: 0
+    };
+    await putCategories(subjectId, {
+      subjectId,
+      model,
+      status: "running",
+      startedAt,
+      scoringTable: [],
+      topCategories: [],
+      deprioritized: [],
+      audit: emptyAudit,
+      steps: [{ t: startedAt, level: "info", msg: "Category derivation started" }]
+    });
+    res.status(202).json({ subjectId, status: "running", startedAt });
+    try {
+      const categories = await deriveCategories({
+        subjectId,
+        useCase: run.useCase,
+        sector: run.sector,
+        ticketBand: run.ticketBand,
+        views: run.views,
+        plan: await fetchTargets(subjectId),
+        scrape: await fetchScrape(subjectId),
+        persona,
+        workspaceId: incomingWorkspace
+      });
+      await putCategories(subjectId, { ...categories, status: "completed", startedAt });
+    } catch (e) {
+      const message = `${e?.name ?? "Error"}: ${e?.message ?? String(e)}`;
+      console.error("[race] categories failed:", message);
+      await putCategories(subjectId, {
+        subjectId,
+        model,
+        status: "failed",
+        startedAt,
+        finishedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        error: message,
+        scoringTable: [],
+        topCategories: [],
+        deprioritized: [],
+        audit: emptyAudit,
+        steps: [{ t: (/* @__PURE__ */ new Date()).toISOString(), level: "error", msg: message }]
+      });
+    }
+  }));
+  r.get("/subjects/:subjectId/categories", json(async (req, res) => {
+    const categories = await fetchCategories(String(req.params.subjectId).trim());
+    if (!categories) return res.status(404).json({ error: "no categories yet \u2014 run step 5" });
+    res.json(categories);
+  }));
+  r.post("/config/workspace", json(async (req, res) => {
+    const workspaceId = String(req.body?.workspaceId ?? "").trim();
+    if (!workspaceId) {
+      return res.status(400).json({ error: "workspaceId is required" });
+    }
+    await saveWorkspaceId(workspaceId);
+    res.json({ ok: true, workspaceId });
+  }));
+  r.get("/config/workspace", json(async (_req, res) => {
+    const workspaceId = await loadWorkspaceId() ?? null;
+    res.json({ workspaceId });
+  }));
+  r.get("/subjects/:subjectId/persona", json(async (req, res) => {
+    const persona = await fetchPersona(String(req.params.subjectId).trim());
+    if (!persona) return res.status(404).json({ error: "no persona yet \u2014 run step 4" });
+    res.json(persona);
+  }));
+  r.get("/subjects/:subjectId/targets", json(async (req, res) => {
+    const plan = await fetchTargets(String(req.params.subjectId).trim());
+    if (!plan) return res.status(404).json({ error: "no plan yet \u2014 run step 2" });
+    res.json(plan);
+  }));
+  r.get("/subjects", json(async (_req, res) => {
+    res.json({ ...await subjectIndex(), subjects: await subjectSummaries() });
+  }));
+  r.get("/subjects/:subjectId/bundle", json(async (req, res) => {
+    const subjectId = String(req.params.subjectId).trim();
+    const index = await listRuns(500);
+    const row = index.find((r2) => r2.subjectId === subjectId && r2.status === "completed" && !r2.screening);
+    if (!row) return res.status(404).json({ error: `no completed run for ${subjectId}` });
+    const map = await subjectIndex();
+    const email = Object.entries(map.byEmail).find(([, id]) => id === subjectId)?.[0];
+    res.json({
+      subjectId,
+      email,
+      run: withViews(await getRun(row.runId)),
+      plan: await fetchTargets(subjectId),
+      scrape: await fetchScrape(subjectId),
+      persona: await fetchPersona(subjectId),
+      categories: await fetchCategories(subjectId)
+    });
+  }));
+  return r;
+}
+export {
+  raceRouter
+};

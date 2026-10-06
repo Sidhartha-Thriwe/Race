@@ -52,9 +52,14 @@ export interface QualCampaign {
 interface CustomerInsightDashboardProps {
   campaigns: QualCampaign[];
   onNavigate: (view: 'builder' | 'management', campaignId?: string) => void;
+  onSwitchToV2?: () => void;
 }
 
-export const CustomerInsightDashboard: React.FC<CustomerInsightDashboardProps> = ({ campaigns, onNavigate }) => {
+export const CustomerInsightDashboard: React.FC<CustomerInsightDashboardProps> = ({ 
+  campaigns, 
+  onNavigate,
+  onSwitchToV2
+}) => {
   const [datePeriod, setDatePeriod] = useState<'This week' | 'Last week' | 'This month' | 'Year to date'>('This month');
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
 
@@ -247,6 +252,19 @@ export const CustomerInsightDashboard: React.FC<CustomerInsightDashboardProps> =
               <option value="Year to date">Year to Date</option>
             </select>
           </div>
+
+          {/* Switch to Dashboard v2 CTA */}
+          {onSwitchToV2 && (
+            <button
+              onClick={onSwitchToV2}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg shadow-2xs transition-all cursor-pointer"
+              title="Switch to Customer Insight Dashboard V2"
+              id="insight_switch_to_v2_btn"
+            >
+              <span>Dashboard v2</span>
+              <span className="text-[9px] px-1 py-0.2 bg-blue-600 text-white rounded font-extrabold">NEW</span>
+            </button>
+          )}
 
           <button
             onClick={() => onNavigate('builder')}

@@ -11,8 +11,11 @@ import { LeadFeed } from './LeadFeed';
 import { LeadQualification } from './LeadQualification';
 import { UsersAccess } from './UsersAccess';
 import { CategoriesManagement } from './CategoriesManagement';
+import { ClientOnboarding } from './ClientOnboarding';
 import { InternalInsight } from './InternalInsight';
 import { LeadDashboardV2 } from './LeadDashboardV2';
+import { QualDashboardV2 } from './QualDashboardV2';
+import { InsightDashboardV2 } from './InsightDashboardV2';
 import { Menu } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -250,7 +253,7 @@ const DEFAULT_CAMPAIGNS: Campaign[] = [
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<DashboardPeriod>('This week');
-  const [activeSection, setActiveSection] = useState<AdminSection>('dashboard');
+  const [activeSection, setActiveSection] = useState<AdminSection>('leadgen-dashboard-v2');
   const [managementInitialFilter, setManagementInitialFilter] = useState<'All' | 'Outside Target' | 'Within Target'>('All');
   const [isSidebarMobileOpen, setIsSidebarMobileOpen] = useState(false);
   const [selectedCampaignForLeads, setSelectedCampaignForLeads] = useState<string | null>(null);
@@ -441,40 +444,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
             <div className="flex-1 pt-6">
               <GlobalOverview setActiveSection={setActiveSection} />
             </div>
-          ) : activeSection === 'leadgen-dashboard' ? (
+          ) : activeSection === 'leadgen-dashboard-v2' || activeSection === 'leadgen-dashboard' ? (
             <>
               {/* Core Dashboard Header */}
               <AdminHeader 
-                selectedPeriod={selectedPeriod} 
-                onPeriodChange={setSelectedPeriod} 
-                onNewCampaign={() => {
-                  setManagementInitialFilter('All');
-                  setActiveSection('builder');
-                }}
-              />
-
-              {/* Core Dashboard Grid */}
-              <div className="flex-1">
-                <AdminDashboardView 
-                  selectedPeriod={selectedPeriod} 
-                  campaigns={campaigns}
-                  onNavigateToManagement={(filter) => {
-                    setManagementInitialFilter(filter || 'All');
-                    setActiveSection('management');
-                  }}
-                  onNewCampaign={() => {
-                    setManagementInitialFilter('All');
-                    setActiveSection('builder');
-                  }}
-                  onSwitchToV2={() => setActiveSection('leadgen-dashboard-v2')}
-                />
-              </div>
-            </>
-          ) : activeSection === 'leadgen-dashboard-v2' ? (
-            <>
-              {/* Core Dashboard Header for V2 */}
-              <AdminHeader 
-                title="Dashboard v2"
+                title="Dashboard"
                 selectedPeriod={selectedPeriod} 
                 onPeriodChange={setSelectedPeriod} 
                 onNewCampaign={() => {
@@ -504,7 +478,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
               <CampaignBuilder 
                 onCancel={() => {
                   setManagementInitialFilter('All');
-                  setActiveSection('leadgen-dashboard');
+                  setActiveSection('leadgen-dashboard-v2');
                 }} 
                 onSave={handleSaveCampaign} 
               />
@@ -549,14 +523,58 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
             <div className="flex-1 pt-6">
               <LeadQualification initialView="results" />
             </div>
-          ) : activeSection === 'qual-dashboard' ? (
-            <div className="flex-1 pt-6">
-              <LeadQualification initialView="dashboard" />
-            </div>
-          ) : activeSection === 'insight-dashboard' ? (
-            <div className="flex-1 pt-6">
-              <LeadQualification initialView="insight-dashboard" />
-            </div>
+          ) : activeSection === 'qual-dashboard-v2' || activeSection === 'qual-dashboard' ? (
+            <>
+              {/* Core Dashboard Header for Lead Qualification */}
+              <AdminHeader 
+                breadcrumb="LEAD QUALIFICATION"
+                title="Dashboard"
+                selectedPeriod={selectedPeriod} 
+                onPeriodChange={setSelectedPeriod} 
+                onNewCampaign={() => {
+                  setActiveSection('qual-builder');
+                }}
+              />
+
+              {/* Lead Qualification Dashboard Component */}
+              <div className="flex-1">
+                <QualDashboardV2 
+                  selectedPeriod={selectedPeriod} 
+                  onNewCampaign={() => {
+                    setActiveSection('qual-builder');
+                  }}
+                  onNavigateToManagement={() => {
+                    setActiveSection('qual-management');
+                  }}
+                />
+              </div>
+            </>
+          ) : activeSection === 'insight-dashboard-v2' || activeSection === 'insight-dashboard' ? (
+            <>
+              {/* Core Dashboard Header for Customer Insight */}
+              <AdminHeader 
+                breadcrumb="CUSTOMER INSIGHT"
+                title="Dashboard"
+                selectedPeriod={selectedPeriod} 
+                onPeriodChange={setSelectedPeriod} 
+                onNewCampaign={() => {
+                  setActiveSection('insight-builder');
+                }}
+              />
+
+              {/* Customer Insight Dashboard V2 Component */}
+              <div className="flex-1">
+                <InsightDashboardV2 
+                  selectedPeriod={selectedPeriod} 
+                  onNewCampaign={() => {
+                    setActiveSection('insight-builder');
+                  }}
+                  onNavigateToManagement={() => {
+                    setActiveSection('insight-management');
+                  }}
+                />
+              </div>
+            </>
           ) : activeSection === 'insight-feed' ? (
             <div className="flex-1 pt-6">
               <LeadQualification initialView="insight-feed" />
@@ -576,6 +594,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
           ) : activeSection === 'categories-management' ? (
             <div className="flex-1 pt-6">
               <CategoriesManagement />
+            </div>
+          ) : activeSection === 'client-onboarding' ? (
+            <div className="flex-1 pt-6">
+              <ClientOnboarding />
             </div>
           ) : activeSection === 'internal-insight' ? (
             <div className="flex-1 pt-6">

@@ -10,10 +10,6 @@ import {
   Info,
   DollarSign,
   Activity,
-  UserCheck,
-  Clock,
-  X,
-  Sparkles,
   Lock,
   Building2,
   SlidersHorizontal,
@@ -21,16 +17,11 @@ import {
   ChevronUp,
   FileSpreadsheet,
   CheckCircle2,
-  PlayCircle,
-  Eye,
-  Layers,
-  Award,
-  TrendingUp,
-  Tag
+  X
 } from 'lucide-react';
 import { QualCampaign, QualFile } from './LeadQualification';
 
-interface CustomerInsightBuilderProps {
+interface LeadQualCampaignBuilderProps {
   selectedCampaign: QualCampaign | null;
   onCancel: () => void;
   onRun: (campaignData: Partial<QualCampaign> & { fileToRun: Omit<QualFile, 'id'> }) => void;
@@ -61,135 +52,7 @@ const INDUSTRY_BUSINESS_LINES_MAP: Record<string, string[]> = {
   'Healthcare': ['Clinical Services', 'Diagnostics', 'Preventive Care', 'Specialty Treatments']
 };
 
-const SAMPLE_PROSPECTS = [
-  {
-    id: "SAMP-001",
-    name: "Suresh Nair",
-    location: "Mumbai",
-    role: "VP Wealth Operations",
-    company: "Aditya Birla Finance",
-    dataQuality: "High Confidence",
-    personaSummary: "Conservative Yield Optimizer seeking high transparency, automated liquidity triggers, and downside capital protection. Values physical advisory touchpoints but expects instant mobile check-ins.",
-    topCategories: [
-      {
-        rank: 1,
-        name: "Capital-Protected Yield PMS",
-        evidenceStrength: 9.2,
-        psychFit: 9.5,
-        rationale: "Requires stable yields to support active portfolio restructuring; highly risk-averse."
-      },
-      {
-        rank: 2,
-        name: "Sovereign Gold Bond Aggregators",
-        evidenceStrength: 8.4,
-        psychFit: 8.9,
-        rationale: "Motivated by security and inflation-hedged wealth preservation."
-      }
-    ]
-  },
-  {
-    id: "SAMP-002",
-    name: "Aditi Deshmukh",
-    location: "Pune",
-    role: "Co-Founder",
-    company: "CyberShield Solutions",
-    dataQuality: "High Confidence",
-    personaSummary: "Aggressive Equity Compounding Maven focused on early-stage disruptors and tech-driven global indices. Autonomous transaction style, high-tech affinity.",
-    topCategories: [
-      {
-        rank: 1,
-        name: "Global Technology PMS",
-        evidenceStrength: 9.6,
-        psychFit: 9.8,
-        rationale: "Strong conviction in deep-tech and AI disruption as the prime wealth multiplier."
-      },
-      {
-        rank: 2,
-        name: "Venture Capital Feeder Funds",
-        evidenceStrength: 8.9,
-        psychFit: 9.2,
-        rationale: "Eager to back high-potential startups; matches her entrepreneurial background."
-      }
-    ]
-  },
-  {
-    id: "SAMP-003",
-    name: "Dr. Rohan Sen",
-    location: "Kolkata",
-    role: "Chief of Cardiology",
-    company: "Apollo Health",
-    dataQuality: "Medium Confidence",
-    personaSummary: "Busy High-Earning Professional with zero time for active trading. Seeks hands-off, ultra-convenient premium wealth management and real estate asset classes.",
-    topCategories: [
-      {
-        rank: 1,
-        name: "Private Wealth Discretionary Advisory",
-        evidenceStrength: 9.4,
-        psychFit: 9.6,
-        rationale: "Requires completely outsourced, high-touch estate and trust advisory."
-      },
-      {
-        rank: 2,
-        name: "Grade-A Commercial Real Estate REITs",
-        evidenceStrength: 8.8,
-        psychFit: 9.1,
-        rationale: "Appreciates rental-yielding hard assets with zero direct management hassle."
-      }
-    ]
-  },
-  {
-    id: "SAMP-004",
-    name: "Vikram Rathore",
-    location: "Jaipur",
-    role: "Managing Partner",
-    company: "Rathore & Sons",
-    dataQuality: "High Confidence",
-    personaSummary: "Legacy-Minded Wealth Preservationist focused on intergenerational trust setups and low-volatility fixed-income instruments. High brand loyalty and community trust.",
-    topCategories: [
-      {
-        rank: 1,
-        name: "Trust & Estate Advisory Services",
-        evidenceStrength: 9.5,
-        psychFit: 9.7,
-        rationale: "Primary focus on securing tax-friendly transition to next-generation leadership."
-      },
-      {
-        rank: 2,
-        name: "Secured Corporate NCD Funds",
-        evidenceStrength: 8.6,
-        psychFit: 8.8,
-        rationale: "Enjoys predictable, fixed coupons from heritage conglomerates."
-      }
-    ]
-  },
-  {
-    id: "SAMP-005",
-    name: "Kavita Krishnamurthy",
-    location: "Bengaluru",
-    role: "Head of Product",
-    company: "SaaSify Inc",
-    dataQuality: "Medium Confidence",
-    personaSummary: "Millennial HNI Investor aiming for ESG-centric and climate-resilient thematic options. Extremely digital-first, expects visual sustainability reports.",
-    topCategories: [
-      {
-        rank: 1,
-        name: "Sustainable & ESG PMS",
-        evidenceStrength: 9.3,
-        psychFit: 9.5,
-        rationale: "Strong preference for green energy, electric mobility, and clean-tech leaders."
-      },
-      {
-        rank: 2,
-        name: "Global Green Energy Feeder Funds",
-        evidenceStrength: 8.7,
-        psychFit: 9.0,
-        rationale: "Motivated by direct social and environmental impact metrics."
-      }
-    ]
-  }
-];
-
-export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
+export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = ({
   selectedCampaign,
   onCancel,
   onRun,
@@ -224,42 +87,32 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
     };
   }, []);
 
-  // Determine if this is an existing campaign with locked parameters
+  // Check if existing campaign with locked parameters
   const isExistingCampaign = Boolean(selectedCampaign && (selectedCampaign.hasRunFirstFile || (selectedCampaign.files && selectedCampaign.files.length > 0)));
 
-  // Form State
+  // Form states
   const [campaignName, setCampaignName] = useState<string>('');
-  const [targetCIC, setTargetCIC] = useState<number>(15);
-  const [useCaseTag, setUseCaseTag] = useState<'Engagement' | 'Retention' | 'General Insight'>('Engagement');
+  const [targetCQC, setTargetCQC] = useState<number>(18);
   const [businessLine, setBusinessLine] = useState<string>('');
   
   // Advanced settings (collapsible, closed by default)
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
-  const [totalBudgetCap, setTotalBudgetCap] = useState<number | ''>('');
   const [notes, setNotes] = useState<string>('');
 
-  // File upload & validation state
+  // File upload state
   const [pendingFile, setPendingFile] = useState<{
     name: string;
     size: string;
     rowsAccepted: number;
     rowsSkipped: number;
     skipReasons: Array<{ count: number; reason: string }>;
-    flatCost: number;
+    cost: number;
   } | null>(null);
-
-  // Sample Scoring Flow States
-  const [hasRunSample, setHasRunSample] = useState<boolean>(false);
-  const [isSampleModalOpen, setIsSampleModalOpen] = useState<boolean>(false);
-  const [isSimulatingSampleRun, setIsSimulatingSampleRun] = useState<boolean>(false);
-  const [sampleProgress, setSampleProgress] = useState<number>(0);
-  const [sampleActualPerRowCost] = useState<number>(11.40); // Empirical per-row cost from 5 samples
-  const [sampleHighConfidenceCost] = useState<number>(19.00); // 3 of 5 are High Confidence => (5 * 11.40)/3 = ₹19.00
 
   const [consentConfirmed, setConsentConfirmed] = useState<boolean>(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
-  // Full processing simulation state
+  // Processing simulation state
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
   const [logs, setLogs] = useState<string[]>([]);
@@ -270,21 +123,16 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
   useEffect(() => {
     if (selectedCampaign) {
       setCampaignName(selectedCampaign.name);
-      setTargetCIC((selectedCampaign as any).targetCIC || selectedCampaign.targetCostPerQualifiedLead || 15);
-      setUseCaseTag((selectedCampaign.useCaseTag === 'Lead Gen' ? 'Engagement' : selectedCampaign.useCaseTag) as any || 'Engagement');
+      setTargetCQC(selectedCampaign.targetCQC || selectedCampaign.targetCostPerQualifiedLead || 18);
       setBusinessLine(selectedCampaign.businessLine || selectedCampaign.targetProduct || clientProfile.businessLines[0] || 'New Sale');
-      setTotalBudgetCap(selectedCampaign.totalBudgetCap || '');
       setNotes(selectedCampaign.notes || '');
     } else {
-      setCampaignName('Zenith HNI Persona & Insight Mapping');
-      setTargetCIC(15);
-      setUseCaseTag('Engagement');
+      setCampaignName('Zenith Festive Tier-1 Qualification');
+      setTargetCQC(18);
       setBusinessLine(clientProfile.businessLines[0] || 'New Sale');
-      setTotalBudgetCap('');
       setNotes('');
     }
     setPendingFile(null);
-    setHasRunSample(false);
     setConsentConfirmed(false);
   }, [selectedCampaign, clientProfile]);
 
@@ -302,13 +150,14 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
   // Simulate file load and validation
   const simulateFileLoad = (fileName: string, fileSize: string) => {
     const accepted = Math.floor(Math.random() * 800 + 1200); // 1200 - 2000 accepted
-    const missingContactSkipped = Math.floor(Math.random() * 22 + 10);
-    const optOutSkipped = Math.floor(Math.random() * 16 + 6);
-    const duplicateSkipped = Math.floor(Math.random() * 10 + 4);
+    const missingContactSkipped = Math.floor(Math.random() * 24 + 14); // missing email AND phone
+    const optOutSkipped = Math.floor(Math.random() * 18 + 8); // DND / opt-out
+    const duplicateSkipped = Math.floor(Math.random() * 12 + 4); // Duplicate in campaign
     const totalSkipped = missingContactSkipped + optOutSkipped + duplicateSkipped;
     
-    // Flat estimate: ₹12.50 per accepted customer record
-    const flatCost = Math.round(accepted * 12.50);
+    // Qualification cost: approx ₹16 per accepted record
+    const costPerAccepted = 16.0;
+    const totalCost = Math.round(accepted * costPerAccepted);
 
     setPendingFile({
       name: fileName,
@@ -317,12 +166,11 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
       rowsSkipped: totalSkipped,
       skipReasons: [
         { count: missingContactSkipped, reason: "Missing both email ID and phone number (skipped individually)" },
-        { count: optOutSkipped, reason: "National DND / internal profiling opt-out list match" },
-        { count: duplicateSkipped, reason: "Duplicate customer record matched in active insight ledger" }
+        { count: optOutSkipped, reason: "National DND / internal opt-out suppression match" },
+        { count: duplicateSkipped, reason: "Duplicate contact record matched with active campaign ledger" }
       ],
-      flatCost
+      cost: totalCost
     });
-    setHasRunSample(false);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -336,7 +184,7 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
       const sizeStr = `${(file.size / (1024 * 1024)).toFixed(2)} MB`;
       simulateFileLoad(file.name, sizeStr);
     } else {
-      simulateFileLoad("customer_crm_insight_roster.xlsx", "2.40 MB");
+      simulateFileLoad("q4_luxury_leads_batch_01.xlsx", "2.14 MB");
     }
   };
 
@@ -349,30 +197,18 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
     if (e.target) e.target.value = '';
   };
 
-  // Cost calculations
-  const effectiveFileCost = useMemo(() => {
-    if (!pendingFile) return 0;
-    if (hasRunSample) {
-      return Math.round(pendingFile.rowsAccepted * sampleActualPerRowCost);
-    }
-    return pendingFile.flatCost;
-  }, [pendingFile, hasRunSample, sampleActualPerRowCost]);
-
-  // Est. CIC Calculation
-  const estCIC = useMemo(() => {
+  // Computed Cost & Est. CQC metrics
+  const estCQC = useMemo(() => {
     if (!pendingFile || pendingFile.rowsAccepted === 0) return 0;
-    if (hasRunSample) {
-      return sampleActualPerRowCost;
-    }
-    return Number((pendingFile.flatCost / pendingFile.rowsAccepted).toFixed(2));
-  }, [pendingFile, hasRunSample, sampleActualPerRowCost]);
+    return Math.round(pendingFile.cost / pendingFile.rowsAccepted);
+  }, [pendingFile]);
 
   const isWithinTarget = useMemo(() => {
-    if (!pendingFile || estCIC === 0) return true;
-    return estCIC <= targetCIC;
-  }, [estCIC, targetCIC, pendingFile]);
+    if (!pendingFile || estCQC === 0) return true;
+    return estCQC <= targetCQC;
+  }, [estCQC, targetCQC, pendingFile]);
 
-  // Prior and Running Total Spend
+  // Campaign running total calculation
   const priorTotalSpend = useMemo(() => {
     if (selectedCampaign && selectedCampaign.totalSpend) {
       return selectedCampaign.totalSpend;
@@ -381,57 +217,28 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
   }, [selectedCampaign]);
 
   const runningTotalSpend = useMemo(() => {
-    return priorTotalSpend + effectiveFileCost;
-  }, [priorTotalSpend, effectiveFileCost]);
+    const fileCost = pendingFile ? pendingFile.cost : 0;
+    return priorTotalSpend + fileCost;
+  }, [priorTotalSpend, pendingFile]);
 
-  // Trigger Sample scoring popup flow
-  const handleOpenSampleModal = () => {
-    if (!pendingFile) return;
-    setIsSampleModalOpen(true);
-    setIsSimulatingSampleRun(true);
-    setSampleProgress(0);
-
-    const interval = setInterval(() => {
-      setSampleProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsSimulatingSampleRun(false);
-          return 100;
-        }
-        return prev + 25;
-      });
-    }, 350);
-  };
-
-  const handleConfirmSampleModal = () => {
-    setHasRunSample(true);
-    setIsSampleModalOpen(false);
-  };
-
-  // Validation
-  const isBudgetCapValid = totalBudgetCap === '' || Number(totalBudgetCap) > 0;
-
+  // Form Validation check
   const isFormValid = useMemo(() => {
     if (!campaignName.trim()) return false;
-    if (!targetCIC || targetCIC <= 0) return false;
-    if (!useCaseTag) return false;
+    if (!targetCQC || targetCQC <= 0) return false;
     if (!businessLine) return false;
     if (!pendingFile || pendingFile.rowsAccepted <= 0) return false;
     if (!consentConfirmed) return false;
-    if (!isBudgetCapValid) return false;
     return true;
-  }, [campaignName, targetCIC, useCaseTag, businessLine, pendingFile, consentConfirmed, isBudgetCapValid]);
+  }, [campaignName, targetCQC, businessLine, pendingFile, consentConfirmed]);
 
-  // Run full file execution
+  // Execute Run Simulation
   const handleRunClick = () => {
     setTouched({
       campaignName: true,
-      targetCIC: true,
-      useCaseTag: true,
+      targetCQC: true,
       businessLine: true,
       file: true,
-      consent: true,
-      budgetCap: true
+      consent: true
     });
 
     if (!isFormValid || !pendingFile) return;
@@ -441,14 +248,14 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
     setLogs([]);
 
     const logSteps = [
-      `[INIT] Validated audience file: ${pendingFile.name} (${pendingFile.size})`,
-      `[USE CASE] Tag: [${useCaseTag}] | Target CIC: ₹${targetCIC} | Est. CIC: ₹${estCIC} (${hasRunSample ? 'Empirical Sample' : 'Flat Estimate'})`,
-      `[BUSINESS CONTEXT] ${clientProfile.industry} • ${businessLine}`,
-      `[COMPLIANCE] Verified behavioral & psychological profiling consent authorization`,
-      `[AI GRAPH] Triggering psychographic propensity & wealth scoring matrix...`,
-      `[FILTER] Filtered out ${pendingFile.rowsSkipped} rows matching opt-out / incomplete contact coords`,
-      `[PERSONA] Generating High & Medium confidence persona clusters...`,
-      `[SUCCESS] 100% processed. ${pendingFile.rowsAccepted} customer profiles scored & enriched!`
+      `[INIT] Validating audience roster file: ${pendingFile.name} (${pendingFile.size})`,
+      `[TARGET] Target CQC: ₹${targetCQC} | Est. File CQC: ₹${estCQC} | Business Line: ${businessLine}`,
+      `[COMPLIANCE] Verified multi-attribute data collection consent confirmed`,
+      `[VALIDATION] Verified ${pendingFile.rowsAccepted} accepted rows. Skipped ${pendingFile.rowsSkipped} incomplete/DND records`,
+      `[RACE ENGINE] Triggering demographic & psychographic intent scoring models...`,
+      `[CONFIDENCE] Segregating High, Medium, and Low confidence tiers...`,
+      `[LEDGER] Registering evaluated cohort into Campaign Management...`,
+      `[SUCCESS] 100% processed. ${pendingFile.rowsAccepted} qualified leads loaded successfully!`
     ];
 
     let currentStep = 0;
@@ -462,13 +269,11 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
         setTimeout(() => {
           onRun({
             name: campaignName.trim(),
-            useCaseTag: useCaseTag,
-            industry: clientProfile.industry,
-            targetProduct: businessLine,
+            targetCQC: targetCQC,
+            targetCostPerQualifiedLead: targetCQC,
             businessLine: businessLine,
-            targetCQC: targetCIC,
-            targetCostPerQualifiedLead: targetCIC,
-            totalBudgetCap: totalBudgetCap,
+            targetProduct: businessLine,
+            industry: clientProfile.industry,
             notes: notes.trim(),
             fileToRun: {
               fileName: pendingFile.name,
@@ -476,19 +281,19 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
               rowsAccepted: pendingFile.rowsAccepted,
               rowsSkipped: pendingFile.rowsSkipped,
               skipReasons: pendingFile.skipReasons,
-              cost: effectiveFileCost,
+              cost: pendingFile.cost,
               dateUploaded: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-              status: 'Completed'
+              status: 'Processing'
             }
           });
           setIsProcessing(false);
         }, 700);
       }
-    }, 800);
+    }, 700);
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-16 font-sans select-none" id="customer-insight-builder-container">
+    <div className="space-y-6 max-w-5xl mx-auto pb-16 font-sans select-none" id="lead-qual-builder-container">
       
       {/* Processing Loading Screen */}
       {isProcessing ? (
@@ -499,9 +304,9 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
           </div>
 
           <div className="space-y-1.5">
-            <h3 className="text-base font-bold text-neutral-900">Profiling Customers & Generating Psychographic Personas...</h3>
+            <h3 className="text-base font-bold text-neutral-900">Qualifying Leads & Evaluating Intent Graph...</h3>
             <p className="text-xs text-neutral-500 max-w-md mx-auto leading-relaxed">
-              Applying proprietary intent scoring and category propensity graphs to your customer cohort.
+              Enriching accepted records against demographic markers, net-worth tiers, and propensity score models.
             </p>
           </div>
 
@@ -529,14 +334,14 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                 type="button"
                 onClick={onCancel}
                 className="p-2 hover:bg-neutral-100 rounded-lg text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
-                title="Back to Customer Insight Management"
+                title="Back to Campaign Management"
               >
                 <ArrowLeft size={16} />
               </button>
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl font-extrabold text-neutral-900 tracking-tight">
-                    {isExistingCampaign ? `Manage Campaign: ${selectedCampaign?.name}` : "Create Customer Insight Campaign"}
+                    {isExistingCampaign ? `Add File: ${selectedCampaign?.name}` : "Create Qualification Campaign"}
                   </h2>
                   {isExistingCampaign && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-bold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded border border-neutral-200">
@@ -546,8 +351,8 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                 </div>
                 <p className="text-xs text-neutral-500 mt-0.5">
                   {isExistingCampaign 
-                    ? "Upload another audience file under this campaign's fixed Target CIC, Use-case and Business line." 
-                    : "Target-first customer intelligence setup powered by your verified client profile."}
+                    ? "Upload another audience file under this campaign's fixed Target CQC and Business line." 
+                    : "Target-first lead qualification setup powered by your verified client profile."}
                 </p>
               </div>
             </div>
@@ -601,7 +406,7 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
               <div className="flex items-center justify-between mb-1.5">
                 <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
                   <span>Campaign name</span> <span className="text-red-500 ml-1">*</span>
-                  <InfoTooltip content="Descriptive identifier for this customer insight campaign in tracking tables and reports." />
+                  <InfoTooltip content="Descriptive identifier for this qualification campaign in tracking tables and reports." />
                 </label>
                 {isExistingCampaign && (
                   <span className="text-[10px] font-semibold text-neutral-400 flex items-center gap-1">
@@ -618,7 +423,7 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                   setCampaignName(e.target.value);
                   setTouched(prev => ({ ...prev, campaignName: true }));
                 }}
-                placeholder="e.g. Zenith HNI Persona & Insight Mapping"
+                placeholder="e.g. Zenith Festive Tier-1 Qualification"
                 className={`w-full px-4 py-2.5 text-xs ${
                   isExistingCampaign 
                     ? 'bg-neutral-100/80 text-neutral-600 cursor-not-allowed border-neutral-200 font-bold' 
@@ -632,12 +437,12 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
               )}
             </div>
 
-            {/* 3. Target CIC (Large currency input placed first after name) */}
+            {/* 3. Target CQC (Large currency input placed first) */}
             <div className="bg-blue-50/40 border border-blue-200/60 rounded-xl p-5 space-y-2">
               <div className="flex items-center justify-between">
                 <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
-                  <span>Target CIC</span> <span className="text-red-500 ml-1">*</span>
-                  <InfoTooltip content="Cost per Customer Insight target benchmark. Matches the Target CIC column on Dashboard v2." />
+                  <span>Target CQC</span> <span className="text-red-500 ml-1">*</span>
+                  <InfoTooltip content="Cost per Qualified Customer target benchmark. Matches the Target CQC column on Dashboard v2." />
                 </label>
                 {isExistingCampaign && (
                   <span className="text-[10px] font-semibold text-neutral-500 flex items-center gap-1">
@@ -651,13 +456,13 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                 <input 
                   type="number" 
                   disabled={isExistingCampaign}
-                  value={targetCIC || ''}
+                  value={targetCQC || ''}
                   onChange={(e) => {
                     const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                    setTargetCIC(val);
-                    setTouched(prev => ({ ...prev, targetCIC: true }));
+                    setTargetCQC(val);
+                    setTouched(prev => ({ ...prev, targetCQC: true }));
                   }}
-                  placeholder="15"
+                  placeholder="18"
                   className={`w-full pl-9 pr-4 py-3 text-lg font-bold ${
                     isExistingCampaign 
                       ? 'bg-neutral-100/80 text-neutral-700 cursor-not-allowed border-neutral-200' 
@@ -668,78 +473,29 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
 
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[11px] pt-1">
                 <p className="text-neutral-500 font-medium">
-                  What you're willing to pay to profile one customer.
+                  What you're willing to pay to qualify one prospect.
                 </p>
                 <p className="text-neutral-600 font-semibold flex items-center gap-1">
                   <span>Your last 30 days avg:</span>
                   <span className="inline-flex items-center text-neutral-900 font-bold bg-white px-2 py-0.5 rounded border border-neutral-200 shadow-2xs">
-                    ₹15
+                    ₹18
                   </span>
                 </p>
               </div>
 
-              {touched.targetCIC && (!targetCIC || targetCIC <= 0) && (
+              {touched.targetCQC && (!targetCQC || targetCQC <= 0) && (
                 <p className="text-[11px] text-red-500 font-bold flex items-center gap-1">
-                  <AlertTriangle size={12} /> Target CIC must be greater than ₹0.
+                  <AlertTriangle size={12} /> Target CQC must be greater than ₹0.
                 </p>
               )}
             </div>
 
-            {/* 4. Use-case tag (Engagement / Retention / General Insight) */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
-                  <span>Use-case tag</span> <span className="text-red-500 ml-1">*</span>
-                  <InfoTooltip content="Calibrates the psychographic and propensity scoring weight distribution." />
-                </label>
-                {isExistingCampaign && (
-                  <span className="text-[10px] font-semibold text-neutral-400 flex items-center gap-1">
-                    <Lock size={10} /> Fixed in existing campaign
-                  </span>
-                )}
-              </div>
-
-              <div className="grid grid-cols-3 gap-2.5">
-                {(['Engagement', 'Retention', 'General Insight'] as const).map((tag) => {
-                  const isSelected = useCaseTag === tag;
-                  return (
-                    <button
-                      key={tag}
-                      type="button"
-                      disabled={isExistingCampaign}
-                      onClick={() => {
-                        if (!isExistingCampaign) {
-                          setUseCaseTag(tag);
-                          setTouched(prev => ({ ...prev, useCaseTag: true }));
-                        }
-                      }}
-                      className={`px-3.5 py-2.5 text-xs font-bold rounded-xl border transition-all text-center flex items-center justify-center gap-1.5 ${
-                        isExistingCampaign
-                          ? isSelected
-                            ? 'bg-neutral-800 text-white border-neutral-800 opacity-90 cursor-not-allowed'
-                            : 'bg-neutral-50 text-neutral-400 border-neutral-200 opacity-60 cursor-not-allowed'
-                          : isSelected
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-xs cursor-pointer'
-                            : 'bg-neutral-50/70 text-neutral-700 border-neutral-200 hover:bg-neutral-100 hover:text-neutral-900 cursor-pointer'
-                      }`}
-                    >
-                      {isSelected && <Check size={13} className="shrink-0 stroke-[3]" />}
-                      <span>{tag}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-[11px] text-neutral-400 font-medium mt-1.5">
-                Affects internal scoring only. Locked after first Run; clone to change.
-              </p>
-            </div>
-
-            {/* 5. Business Line (Single-select scoped to client profile) */}
+            {/* 4. Business Line (Single-select scoped to client profile) */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
                   <span>Business line</span> <span className="text-red-500 ml-1">*</span>
-                  <InfoTooltip content="Scoped to your onboarded business lines. Replaces the generic business context form." />
+                  <InfoTooltip content="Scoped to your onboarded business lines. Sets the evaluation and propensity model for this campaign." />
                 </label>
                 {isExistingCampaign && (
                   <span className="text-[10px] font-semibold text-neutral-400 flex items-center gap-1">
@@ -786,11 +542,11 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
               )}
             </div>
 
-            {/* 6. File Upload (.csv / .xls / .xlsx) */}
+            {/* 5. File Upload (.csv / .xls / .xlsx) */}
             <div className="space-y-3">
               <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
                 <span>Upload Audience File</span> <span className="text-red-500 ml-1">*</span>
-                <InfoTooltip content="Accepts .csv, .xls, and .xlsx files up to 25 MB. Rows missing both phone and email are skipped individually." />
+                <InfoTooltip content="Accepts .csv, .xls, and .xlsx prospect files up to 25 MB. Incomplete contact rows missing both phone and email are skipped individually." />
               </label>
 
               {/* Hidden file input */}
@@ -812,12 +568,12 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                   <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-2xs text-neutral-500 border border-neutral-200">
                     <UploadCloud size={24} className="text-blue-600" />
                   </div>
-                  <h4 className="text-xs font-bold text-neutral-900">Click or drag & drop customer audience file</h4>
+                  <h4 className="text-xs font-bold text-neutral-900">Click or drag & drop audience file to validate</h4>
                   <p className="text-[11px] text-neutral-500 mt-1">
                     Accepts <strong>.csv</strong>, <strong>.xls</strong>, or <strong>.xlsx</strong> files (Up to 25 MB)
                   </p>
                   <span className="inline-block mt-3 text-[10px] font-semibold text-neutral-500 bg-neutral-100 px-3 py-1 rounded-md border border-neutral-200">
-                    A row missing both email and phone is skipped on its own; the rest of the file is kept
+                    Rows missing both email & phone are skipped individually without rejecting the whole file
                   </span>
                 </div>
               ) : (
@@ -835,10 +591,7 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        setPendingFile(null);
-                        setHasRunSample(false);
-                      }}
+                      onClick={() => setPendingFile(null)}
                       className="p-1.5 hover:bg-neutral-200 text-neutral-400 hover:text-neutral-700 rounded-lg transition-colors cursor-pointer"
                       title="Replace file"
                     >
@@ -846,7 +599,7 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                     </button>
                   </div>
 
-                  {/* Validation Summary */}
+                  {/* 6. Validation Summary */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                     <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5">
                       <div className="flex items-center justify-between">
@@ -859,7 +612,7 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                         {pendingFile.rowsAccepted.toLocaleString('en-IN')}
                       </div>
                       <p className="text-[10.5px] text-emerald-700 font-medium mt-0.5">
-                        Ready for customer insight profiling
+                        Ready for qualification & scoring
                       </p>
                     </div>
 
@@ -883,57 +636,17 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                     </div>
                   </div>
 
-                  {/* 7. Run Customer Insight Scoring sample button */}
-                  <div className="pt-1">
-                    <div className="p-4 bg-gradient-to-r from-blue-50 via-indigo-50/50 to-blue-50 border border-blue-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                          <Sparkles size={18} />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-xs font-bold text-neutral-900">Run Customer Insight Scoring sample</h4>
-                            {hasRunSample && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                                <Check size={11} className="stroke-[3]" /> Sample Completed
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-neutral-500 mt-0.5">
-                            Free test pass on 5 real prospects to calculate empirical CIC and view persona preview.
-                          </p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleOpenSampleModal}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-98 cursor-pointer shrink-0 flex items-center justify-center gap-1.5"
-                      >
-                        <PlayCircle size={14} />
-                        <span>{hasRunSample ? "Re-run Sample Scoring" : "Run Scoring Sample"}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* 8. Stat Tiles: Cost estimate, Running total spend, Est. CIC vs Target */}
+                  {/* 7. Stat Tiles: Cost estimate, Running total spend, Est. CQC vs Target */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                     
                     {/* Cost Estimate (this file) */}
                     <div className="bg-white border border-neutral-200 rounded-xl p-4 flex flex-col justify-between shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider">
-                          Cost estimate (this file)
-                        </span>
-                        {hasRunSample && (
-                          <span className="text-[9px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
-                            Based on sample
-                          </span>
-                        )}
-                      </div>
+                      <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider">
+                        Cost estimate (this file)
+                      </span>
                       <div className="mt-2 flex items-baseline justify-between">
                         <span className="text-xl font-black text-neutral-900 tracking-tight">
-                          ₹{effectiveFileCost.toLocaleString('en-IN')}
+                          ₹{pendingFile.cost.toLocaleString('en-IN')}
                         </span>
                         <span className="text-[10px] font-semibold text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
                           {pendingFile.rowsAccepted} rows
@@ -956,25 +669,18 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                       </div>
                     </div>
 
-                    {/* Est. CIC vs Target */}
+                    {/* Est. CQC vs Target */}
                     <div className={`border rounded-xl p-4 flex flex-col justify-between transition-all ${
                       isWithinTarget
                         ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950'
                         : 'bg-amber-50/80 border-amber-300 text-amber-950'
                     }`}>
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                            isWithinTarget ? 'text-emerald-700' : 'text-amber-700'
-                          }`}>
-                            Est. CIC vs Target
-                          </span>
-                          {hasRunSample && (
-                            <span className="text-[9px] font-bold text-emerald-800 bg-emerald-100/90 px-1.5 py-0.2 rounded">
-                              Based on sample
-                            </span>
-                          )}
-                        </div>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                          isWithinTarget ? 'text-emerald-700' : 'text-amber-700'
+                        }`}>
+                          Est. CQC vs Target
+                        </span>
                         <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
                           isWithinTarget 
                             ? 'bg-emerald-600 text-white' 
@@ -993,16 +699,16 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                           <span className={`text-xl font-black tracking-tight ${
                             isWithinTarget ? 'text-emerald-900' : 'text-amber-900'
                           }`}>
-                            ₹{estCIC}
+                            ₹{estCQC}
                           </span>
                           <span className="text-[11px] text-neutral-500 font-medium">
-                            (Target: ₹{targetCIC})
+                            (Target: ₹{targetCQC})
                           </span>
                         </div>
                         <p className={`text-[10.5px] font-semibold mt-1 leading-snug ${
                           isWithinTarget ? 'text-emerald-700' : 'text-amber-800'
                         }`}>
-                          Profiling this file will cost ~₹{estCIC} per customer.
+                          Qualifying this file will cost ~₹{estCQC} per prospect.
                         </p>
                       </div>
                     </div>
@@ -1012,7 +718,7 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
               )}
             </div>
 
-            {/* 9. Advanced Settings (Collapsible, closed by default) */}
+            {/* 8. Advanced Settings (Collapsible, closed by default) */}
             <div className="border border-neutral-200/80 rounded-xl overflow-hidden">
               <button
                 type="button"
@@ -1025,7 +731,7 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                     Advanced settings
                   </span>
                   <span className="text-[10px] font-semibold text-neutral-500 bg-white border border-neutral-200 px-2 py-0.5 rounded-full">
-                    Budget cap & notes
+                    Optional notes
                   </span>
                 </div>
                 <div className="flex items-center gap-1 text-xs text-neutral-500 font-medium">
@@ -1036,46 +742,16 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
 
               {showAdvanced && (
                 <div className="p-5 sm:p-6 bg-white space-y-4 border-t border-neutral-200/80">
-                  {/* Total budget cap */}
-                  <div>
-                    <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
-                      <span>Total budget cap (₹)</span>
-                      <InfoTooltip content="Optional hard spend ceiling. Hard-stops the campaign once reached, no matter how many files are added later." />
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-xs">₹</span>
-                      <input 
-                        type="number"
-                        min="1"
-                        step="1000"
-                        value={totalBudgetCap}
-                        onChange={(e) => {
-                          const val = e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10));
-                          setTotalBudgetCap(val);
-                          setTouched(prev => ({ ...prev, budgetCap: true }));
-                        }}
-                        placeholder="e.g. 50000"
-                        className="w-full pl-8 pr-4 py-2 text-xs bg-neutral-50/70 focus:bg-white border border-neutral-200 rounded-xl text-neutral-900 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                      />
-                    </div>
-                    {touched.budgetCap && totalBudgetCap !== '' && Number(totalBudgetCap) <= 0 && (
-                      <p className="text-[11px] text-red-500 font-bold mt-1.5 flex items-center gap-1">
-                        <AlertTriangle size={12} /> Total budget cap must be greater than ₹0.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Internal notes / objective */}
                   <div>
                     <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
                       <span>Internal notes / objective</span>
-                      <InfoTooltip content="Record campaign objective, audience cohort origin, or profiling notes." />
+                      <InfoTooltip content="Record campaign goals, audience sourcing notes, or team comments." />
                     </label>
                     <textarea 
                       rows={2}
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Record internal notes, campaign objective, or team attribution..."
+                      placeholder="Record internal notes, qualification objectives, or source attribution..."
                       className="w-full px-3.5 py-2 text-xs bg-neutral-50/70 focus:bg-white border border-neutral-200 rounded-xl text-neutral-900 font-medium placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
                     />
                   </div>
@@ -1083,7 +759,7 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
               )}
             </div>
 
-            {/* 10. Consent Checkbox */}
+            {/* 9. Consent Checkbox */}
             <div className="p-4 bg-neutral-50/80 border border-neutral-200/80 rounded-xl">
               <label className="flex items-start gap-3 cursor-pointer select-none">
                 <input
@@ -1097,17 +773,17 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                   id="consent_checkbox"
                 />
                 <span className="text-xs text-neutral-700 font-semibold leading-relaxed">
-                  I confirm this list was collected with consent covering behavioral and psychological profiling, not only contact use.
+                  I confirm this list was collected with appropriate consent for this use.
                 </span>
               </label>
               {touched.consent && !consentConfirmed && (
                 <p className="text-[11px] text-red-500 font-bold mt-2 flex items-center gap-1">
-                  <AlertTriangle size={12} /> Profiling consent confirmation is required before running campaign.
+                  <AlertTriangle size={12} /> Sourcing consent confirmation is required before running qualification.
                 </p>
               )}
             </div>
 
-            {/* 11. Actions Footer: Cancel, Clone campaign (if existing), and Run */}
+            {/* 10. Actions Footer: Cancel, Clone campaign (if existing), and Run */}
             <div className="pt-4 border-t border-neutral-200/80 flex flex-col sm:flex-row items-center justify-between gap-3">
               <button
                 type="button"
@@ -1138,7 +814,7 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                       ? 'bg-neutral-300 cursor-not-allowed text-neutral-500'
                       : 'bg-blue-600 hover:bg-blue-700 active:scale-98 cursor-pointer shadow-blue-500/20 shadow-md'
                   }`}
-                  id="run_customer_insight_campaign_btn"
+                  id="run_qualification_campaign_btn"
                 >
                   <Activity size={14} />
                   <span>Run</span>
@@ -1148,174 +824,6 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
 
           </div>
         </>
-      )}
-
-      {/* SAMPLE SCORING MODAL */}
-      {isSampleModalOpen && pendingFile && (
-        <div className="fixed inset-0 bg-neutral-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-neutral-200 overflow-hidden">
-            
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between bg-neutral-50/70">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 text-blue-700 rounded-xl">
-                  <Sparkles size={18} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-neutral-900">Customer Insight Scoring Sample (5 Prospects)</h3>
-                  <p className="text-xs text-neutral-500 font-medium">Free empirical scoring verification on 5 actual prospect records</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsSampleModalOpen(false)}
-                className="p-1.5 hover:bg-neutral-200 text-neutral-400 hover:text-neutral-700 rounded-lg transition-colors cursor-pointer"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-6 flex-1">
-              {isSimulatingSampleRun ? (
-                <div className="py-16 text-center space-y-4">
-                  <div className="relative w-16 h-16 mx-auto flex items-center justify-center bg-blue-50 rounded-full border border-blue-100">
-                    <Activity className="text-blue-600 animate-pulse" size={24} />
-                    <span className="absolute text-[9px] font-black text-blue-800">{sampleProgress}%</span>
-                  </div>
-                  <div className="space-y-1">
-                    <h4 className="text-xs font-bold text-neutral-900">Extracting 5 Records & Synthesizing Personas...</h4>
-                    <p className="text-[11px] text-neutral-500">Evaluating psychographic propensity against sector attributes.</p>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Summary & Metrics Strip with NEW LINES */}
-                  <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-neutral-400 block">Sample Size</span>
-                      <strong className="text-sm font-extrabold text-neutral-900">5 Prospects (Free)</strong>
-                      <span className="text-[10px] text-neutral-500 block mt-0.5">3 High / 2 Medium Conf</span>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-neutral-400 block">Estimated Full-File Cost</span>
-                      <strong className="text-sm font-extrabold text-neutral-900">
-                        ₹{Math.round(pendingFile.rowsAccepted * sampleActualPerRowCost).toLocaleString('en-IN')}
-                      </strong>
-                      <span className="text-[10px] text-neutral-500 block mt-0.5">₹{sampleActualPerRowCost.toFixed(2)}/row empirical</span>
-                    </div>
-
-                    {/* NEW: Sample CIC vs Target */}
-                    <div className={`p-2.5 rounded-lg border ${
-                      sampleActualPerRowCost <= targetCIC 
-                        ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950' 
-                        : 'bg-amber-50/70 border-amber-200 text-amber-950'
-                    }`}>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9.5px] uppercase font-bold text-neutral-600 block">Sample CIC vs Target</span>
-                        {sampleActualPerRowCost <= targetCIC ? (
-                          <Check size={12} className="text-emerald-700 stroke-[3]" />
-                        ) : (
-                          <AlertTriangle size={12} className="text-amber-700 stroke-[3]" />
-                        )}
-                      </div>
-                      <div className="flex items-baseline gap-1.5 mt-0.5">
-                        <strong className="text-sm font-black">₹{sampleActualPerRowCost.toFixed(2)}</strong>
-                        <span className="text-[10px] font-semibold text-neutral-600">(Target: ₹{targetCIC})</span>
-                      </div>
-                      <span className={`text-[9.5px] font-bold block ${
-                        sampleActualPerRowCost <= targetCIC ? 'text-emerald-700' : 'text-amber-700'
-                      }`}>
-                        {sampleActualPerRowCost <= targetCIC ? 'Within target' : 'Exceeds target'}
-                      </span>
-                    </div>
-
-                    {/* NEW: Sample cost per High Confidence insight */}
-                    <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-lg text-blue-950">
-                      <span className="text-[9.5px] uppercase font-bold text-blue-700 block">Cost / High Confidence</span>
-                      <div className="flex items-baseline gap-1.5 mt-0.5">
-                        <strong className="text-sm font-black text-blue-900">₹{sampleHighConfidenceCost.toFixed(2)}</strong>
-                      </div>
-                      <span className="text-[9.5px] font-semibold text-blue-700 block">
-                        Derived from sample yield
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Sample Persona Cards */}
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-500">
-                      Sample Generated Profiles (First 5 Rows)
-                    </h4>
-
-                    <div className="space-y-3">
-                      {SAMPLE_PROSPECTS.map((prospect) => (
-                        <div key={prospect.id} className="border border-neutral-200 rounded-xl p-4 hover:border-blue-300 bg-white transition-all space-y-3 shadow-2xs">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-100 pb-2.5">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-7 h-7 rounded-full bg-neutral-100 text-neutral-700 font-bold text-xs flex items-center justify-center">
-                                {prospect.name.charAt(0)}
-                              </div>
-                              <div>
-                                <span className="text-xs font-bold text-neutral-900">{prospect.name}</span>
-                                <span className="text-[10.5px] text-neutral-400 font-medium ml-2">
-                                  {prospect.role} • {prospect.company} ({prospect.location})
-                                </span>
-                              </div>
-                            </div>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                              prospect.dataQuality === 'High Confidence'
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                : 'bg-blue-50 text-blue-800 border-blue-200'
-                            }`}>
-                              {prospect.dataQuality}
-                            </span>
-                          </div>
-
-                          <p className="text-xs text-neutral-600 leading-relaxed font-medium bg-neutral-50 p-2.5 rounded-lg border border-neutral-150">
-                            "{prospect.personaSummary}"
-                          </p>
-
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] font-bold uppercase text-neutral-400">Top Matched Product Categories:</span>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {prospect.topCategories.map((cat, i) => (
-                                <div key={i} className="p-2 bg-white border border-neutral-200 rounded-lg text-xs space-y-0.5">
-                                  <div className="flex items-center justify-between font-bold text-neutral-800">
-                                    <span>#{cat.rank} {cat.name}</span>
-                                    <span className="text-blue-600 font-mono text-[11px]">{cat.psychFit}/10 fit</span>
-                                  </div>
-                                  <p className="text-[10.5px] text-neutral-500 leading-snug">{cat.rationale}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="px-6 py-3.5 border-t border-neutral-200 bg-neutral-50 flex items-center justify-between">
-              <span className="text-xs text-neutral-500 font-medium">
-                Sample scoring is free and does not charge your account balance.
-              </span>
-              <button
-                type="button"
-                disabled={isSimulatingSampleRun}
-                onClick={handleConfirmSampleModal}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-98 cursor-pointer disabled:opacity-50"
-              >
-                Confirm and proceed
-              </button>
-            </div>
-
-          </div>
-        </div>
       )}
 
     </div>

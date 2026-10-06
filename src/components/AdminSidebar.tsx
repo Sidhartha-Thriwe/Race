@@ -26,15 +26,18 @@ export type AdminSection =
   | 'management' 
   | 'leads' 
   | 'qual-dashboard' 
+  | 'qual-dashboard-v2'
   | 'qual-builder' 
   | 'qual-management' 
   | 'qual-feed' 
   | 'insight-dashboard' 
+  | 'insight-dashboard-v2'
   | 'insight-builder' 
   | 'insight-management' 
   | 'insight-feed' 
   | 'users-access' 
   | 'categories-management'
+  | 'client-onboarding'
   | 'internal-insight';
 
 interface AdminSidebarProps {
@@ -157,23 +160,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
       {/* Main Navigation */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-7 scrollbar-thin">
-        {/* Top-Level Items */}
-        <div className="space-y-1">
-          <button 
-            onClick={() => setActiveSection('dashboard')}
-            className={`w-full flex items-center justify-between px-3 py-2.5 text-xs font-medium rounded-lg cursor-pointer transition-colors ${
-              activeSection === 'dashboard' 
-                ? 'text-white bg-white/5' 
-                : 'text-neutral-400 hover:text-neutral-100 hover:bg-white/5'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <LayoutDashboard size={16} />
-              <span>Home</span>
-            </div>
-          </button>
-        </div>
-
         {/* Lead Gen - Active Section */}
         <div>
           <div className="flex items-center justify-between px-3 py-2 text-xs font-semibold tracking-wider text-[#5d8ae8] uppercase">
@@ -185,34 +171,20 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           </div>
           
           <div className="mt-2 pl-3 space-y-1 border-l border-white/5 ml-5">
-            {/* Active Sub-item Dashboard */}
+            {/* Dashboard (Dashboard v2 is the only accessible dashboard, renamed to Dashboard) */}
             <button 
-              onClick={() => setActiveSection('leadgen-dashboard')}
+              onClick={() => {
+                setActiveSection('leadgen-dashboard-v2');
+                onClose?.();
+              }}
               className={`w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md cursor-pointer transition-all ${
-                activeSection === 'leadgen-dashboard'
+                activeSection === 'leadgen-dashboard-v2' || activeSection === 'leadgen-dashboard'
                   ? 'text-white bg-[#2563eb]/90 font-bold'
                   : 'text-neutral-400 hover:bg-white/5 hover:text-white'
               }`}
+              id="sidebar_leadgen_dashboard_btn"
             >
               <span>Dashboard</span>
-            </button>
-            
-            {/* Dashboard v2 (New!) */}
-            <button 
-              onClick={() => setActiveSection('leadgen-dashboard-v2')}
-              className={`w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md cursor-pointer transition-all ${
-                activeSection === 'leadgen-dashboard-v2'
-                  ? 'text-white bg-[#2563eb]/90 font-bold'
-                  : 'text-neutral-400 hover:bg-white/5 hover:text-white'
-              }`}
-              id="sidebar_leadgen_dashboard_v2_btn"
-            >
-              <div className="flex items-center gap-1.5">
-                <span>Dashboard v2</span>
-                <span className="text-[9px] px-1.5 py-0.5 bg-blue-500/20 text-blue-300 font-bold rounded">
-                  v2
-                </span>
-              </div>
             </button>
             
             {/* Campaign builder */}
@@ -264,13 +236,18 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           </div>
           
           <div className="mt-2 pl-3 space-y-1 border-l border-white/5 ml-5">
+            {/* Dashboard (Dashboard v2 is the only accessible dashboard, renamed to Dashboard) */}
             <button 
-              onClick={() => setActiveSection('qual-dashboard')}
+              onClick={() => {
+                setActiveSection('qual-dashboard-v2');
+                onClose?.();
+              }}
               className={`w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md cursor-pointer transition-all ${
-                activeSection === 'qual-dashboard'
+                activeSection === 'qual-dashboard-v2' || activeSection === 'qual-dashboard'
                   ? 'text-white bg-[#2563eb]/90 font-bold'
                   : 'text-neutral-400 hover:bg-white/5 hover:text-white'
               }`}
+              id="sidebar_qual_dashboard_btn"
             >
               <span>Dashboard</span>
             </button>
@@ -318,13 +295,18 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           </div>
           
           <div className="mt-2 pl-3 space-y-1 border-l border-white/5 ml-5">
+            {/* Dashboard (Dashboard v2 is the only accessible dashboard, renamed to Dashboard) */}
             <button 
-              onClick={() => setActiveSection('insight-dashboard')}
+              onClick={() => {
+                setActiveSection('insight-dashboard-v2');
+                onClose?.();
+              }}
               className={`w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md cursor-pointer transition-all ${
-                activeSection === 'insight-dashboard'
+                activeSection === 'insight-dashboard-v2' || activeSection === 'insight-dashboard'
                   ? 'text-white bg-[#2563eb]/90 font-bold'
                   : 'text-neutral-400 hover:bg-white/5 hover:text-white'
               }`}
+              id="sidebar_insight_dashboard_btn"
             >
               <span>Dashboard</span>
             </button>
@@ -395,6 +377,18 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 }`}
               >
                 <span>Categories Management</span>
+              </button>
+
+              <button 
+                onClick={() => setActiveSection('client-onboarding')}
+                className={`w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md cursor-pointer transition-all ${
+                  activeSection === 'client-onboarding'
+                    ? 'text-white bg-[#2563eb]/90 font-bold'
+                    : 'text-neutral-400 hover:bg-white/5 hover:text-white'
+                }`}
+                id="sidebar_client_onboarding_btn"
+              >
+                <span>Client Onboarding</span>
               </button>
             </div>
           </div>

@@ -1,22 +1,29 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  Plus, 
-  HelpCircle, 
-  Search, 
-  X, 
+  Check, 
   AlertTriangle, 
   Calendar, 
   Sparkles, 
-  DollarSign, 
-  Check, 
-  Info,
-  ChevronRight
+  Search, 
+  X, 
+  ChevronDown, 
+  ChevronUp, 
+  ChevronRight, 
+  Lock, 
+  TrendingDown, 
+  Info, 
+  HelpCircle,
+  ShieldCheck,
+  Building2,
+  SlidersHorizontal,
+  ArrowRight
 } from 'lucide-react';
 
 export interface Campaign {
   id: string;
   name: string;
   industry: string;
+  businessLine?: string;
   categories: string[];
   confidence: 'High' | 'Medium' | 'Both';
   personas: string[];
@@ -27,6 +34,7 @@ export interface Campaign {
   totalBudgetCap: number | '';
   startDate: string;
   endDate: string;
+  duration?: number;
   notes: string;
   status: 'Active' | 'Scheduled' | 'Draft' | 'Paused' | 'Completed';
   createdAt: string;
@@ -34,11 +42,13 @@ export interface Campaign {
     estLeadsPerDay: number;
     estTotalLeads: number;
     estTotalSpend: number;
+    estCAC?: number;
   };
   currentSpend?: number;
   leadsAcquired?: number;
   owner?: string;
   targetCAC?: number;
+  // Legacy backward-compatibility fields
   productSector?: string;
   ticketSizeMin?: number;
   ticketSizeMax?: number;
@@ -75,16 +85,6 @@ const ALL_CATEGORIES = [
   "High-End Horology"
 ];
 
-const ALL_PRODUCT_SECTORS = [
-  "Credit Cards", 
-  "Wealth Advisory", 
-  "Retail Banking", 
-  "Personal Loans", 
-  "Business Loans",
-  "Luxury Concierge",
-  "Custom Portfolio"
-];
-
 const ALL_GEOGRAPHIES = [
   "Mumbai", 
   "Delhi NCR", 
@@ -96,47 +96,78 @@ const ALL_GEOGRAPHIES = [
   "Ahmedabad"
 ];
 
+const INDUSTRY_BUSINESS_LINES_MAP: Record<string, string[]> = {
+  'Automobile': ['New Sale', 'Resale', 'Services', 'Parts'],
+  'Real Estate': ['New Launch', 'Resale', 'Rentals / Leasing', 'Commercial'],
+  'Luxury Watches': ['New Watches', 'Pre-owned', 'Servicing & Repairs', 'Accessories'],
+  'Wealth Management': ['Wealth Advisory', 'Portfolio Management', 'Private Banking', 'Structured Products']
+};
+
 export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onCancel, onSave }) => {
-  // 1. Campaign state
-  const [name, setName] = useState('Zenith Premium Wealth Q4');
+  // 1. Pull Onboarded Client Profile
+  const clientProfile = useMemo(() => {
+    try {
+      const stored = localStorage.getItem('race_active_client') || localStorage.getItem('zenith_client_profile');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return {
+          name: parsed.clientName || 'Zenith Luxury Motors',
+          industry: parsed.industry || 'Automobile',
+          ticketSize: parsed.avgTicketSize || 2500000,
+          purchaseChannel: parsed.purchaseChannel || 'Both',
+          businessLines: parsed.businessLines && parsed.businessLines.length > 0 
+            ? parsed.businessLines 
+            : (INDUSTRY_BUSINESS_LINES_MAP[parsed.industry || 'Automobile'] || ['New Sale', 'Resale', 'Services', 'Parts'])
+        };
+      }
+    } catch {
+      // Fallback
+    }
+    // Default onboarded client profile
+    return {
+      name: 'Zenith Luxury Motors',
+      industry: 'Automobile',
+      ticketSize: 2500000,
+      purchaseChannel: 'Both',
+      businessLines: ['New Sale', 'Resale', 'Services', 'Parts']
+    };
+  }, []);
+
+  // 2. Core Form State (Target-first simplified flow)
+  const [name, setName] = useState('Zenith Festive Luxury Drive 2026');
   const [targetCAC, setTargetCAC] = useState<number>(2500);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(["Golf", "Leisure travel"]);
-  const [productSector, setProductSector] = useState<string>('Wealth Advisory');
-  const [confidence, setConfidence] = useState<'High' | 'Medium' | 'Both'>('Both');
-  const [ticketSizeMin, setTicketSizeMin] = useState<number>(500000);
-  const [ticketSizeMax, setTicketSizeMax] = useState<number>(2500000);
-  const [purchaseCycle, setPurchaseCycle] = useState<'One-time' | 'Recurring subscription'>('Recurring subscription');
-  const [avgSaleCycle, setAvgSaleCycle] = useState<'1 Day' | '1 Week' | '1 Month'>('1 Week');
+  const [businessLine, setBusinessLine] = useState<string>(clientProfile.businessLines[0] || 'New Sale');
   const [selectedGeographies, setSelectedGeographies] = useState<string[]>(["Mumbai", "Delhi NCR", "Bengaluru"]);
   const [geoSearchQuery, setGeoSearchQuery] = useState('');
   const [geoDropdownOpen, setGeoDropdownOpen] = useState(false);
-  const [excludeDelivered, setExcludeDelivered] = useState(true);
-  const [excludeExisting, setExcludeExisting] = useState(true);
+
+  // Budget and duration
   const [budgetPerDay, setBudgetPerDay] = useState<number>(10000);
-  const [totalBudgetCap, setTotalBudgetCap] = useState<number | ''>(300000);
-  const [startDate, setStartDate] = useState('2026-09-21');
-  const [endDate, setEndDate] = useState('2026-10-21'); // Default 30-day window
-  const [notes, setNotes] = useState('Targeting premium HNIs for high-yield wealth advisory onboarding.');
+  const [durationDays, setDurationDays] = useState<number>(30);
+  const [startDate, setStartDate] = useState('2026-09-22');
 
-  // Form errors
-  const [nameError, setNameError] = useState('');
+  // Advanced settings state (collapsed by default)
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(["Golf", "Leisure travel"]);
+  const [confidence, setConfidence] = useState<'High' | 'Medium' | 'Both'>('High'); // Defaults to High
+  const [excludeDelivered, setExcludeDelivered] = useState<boolean>(true); // Defaults to true
+  const [excludeExisting, setExcludeExisting] = useState<boolean>(true); // Defaults to true
+  const [totalBudgetCap, setTotalBudgetCap] = useState<number | ''>('');
+  const [notes, setNotes] = useState('');
 
-  // Derived personas list to keep compatibility with CampaignManagement.tsx
-  const derivedPersonas = useMemo(() => {
-    const list: string[] = [];
-    if (ticketSizeMin >= 1000000) {
-      list.push("UHNI");
-    }
-    if (ticketSizeMin >= 100000 || ticketSizeMax >= 1000000) {
-      list.push("HNI");
-    }
-    if (ticketSizeMin < 500000) {
-      list.push("Mass affluent");
-    }
-    return list.length > 0 ? list : ["HNI"];
-  }, [ticketSizeMin, ticketSizeMax]);
+  // Touched / validation tracking
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
-  // 2. Filter available geographies based on search
+  // 3. Computed End Date based on duration
+  const endDate = useMemo(() => {
+    const start = new Date(startDate);
+    if (isNaN(start.getTime())) return startDate;
+    const end = new Date(start);
+    end.setDate(end.getDate() + Math.max(1, durationDays) - 1);
+    return end.toISOString().split('T')[0];
+  }, [startDate, durationDays]);
+
+  // 4. Geographies search filter
   const filteredGeographies = useMemo(() => {
     return ALL_GEOGRAPHIES.filter(city => 
       city.toLowerCase().includes(geoSearchQuery.toLowerCase()) && 
@@ -144,110 +175,84 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onCancel, onSa
     );
   }, [geoSearchQuery, selectedGeographies]);
 
-  // 3. Compute duration in days
-  const durationInDays = useMemo(() => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) return 1;
-    const diffTime = Math.abs(end.getTime() - start.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // inclusive
-    return diffDays > 0 ? diffDays : 1;
-  }, [startDate, endDate]);
-
-  // 4. Live Forecast Engine
+  // 5. Live Forecast Engine
   const forecast = useMemo(() => {
-    // Average Cost Per Lead (CPL) estimates based on Product Sector, ticket size, and categories
-    let baseCPL = 1500;
-    
-    if (productSector === "Credit Cards") baseCPL = 800;
-    else if (productSector === "Wealth Advisory") baseCPL = 3000;
-    else if (productSector === "Retail Banking") baseCPL = 500;
-    else if (productSector === "Personal Loans") baseCPL = 1200;
-    else if (productSector === "Business Loans") baseCPL = 1800;
-    else if (productSector === "Luxury Concierge") baseCPL = 2500;
-    else if (productSector === "Custom Portfolio") baseCPL = 3500;
+    // Base CAC calculation based on Business Line
+    let baseCAC = 2200;
+    if (businessLine === 'New Sale' || businessLine === 'New Launch' || businessLine === 'New Watches') {
+      baseCAC = 2400;
+    } else if (businessLine === 'Resale' || businessLine === 'Pre-owned') {
+      baseCAC = 1800;
+    } else if (businessLine === 'Services' || businessLine === 'Servicing & Repairs') {
+      baseCAC = 1200;
+    } else if (businessLine === 'Parts' || businessLine === 'Accessories') {
+      baseCAC = 950;
+    } else if (businessLine === 'Rentals / Leasing') {
+      baseCAC = 1600;
+    } else if (businessLine === 'Commercial') {
+      baseCAC = 2800;
+    }
 
-    // Categories multiplier
+    // Category affinity multiplier
     let categoryMultiplier = 1.0;
     if (selectedCategories.length > 0) {
-      // High end categories slightly increase CPL but provide extremely rich lead quality
       let sum = 0;
       selectedCategories.forEach(cat => {
-        if (cat === "Golf" || cat === "Private Yachting" || cat === "High-End Horology") sum += 1.3;
-        else if (cat === "Luxury Automobiles" || cat === "Leisure travel") sum += 1.1;
-        else sum += 0.9;
+        if (cat === "Golf" || cat === "Private Yachting" || cat === "High-End Horology") sum += 1.15;
+        else if (cat === "Luxury Automobiles" || cat === "Leisure travel") sum += 1.05;
+        else sum += 0.95;
       });
       categoryMultiplier = sum / selectedCategories.length;
     }
 
-    // Scale by ticket size (replaces persona-based multiplier)
-    let ticketMultiplier = 1.0;
-    if (ticketSizeMin >= 5000000) {
-      ticketMultiplier = 2.2; // UHNI segment costs more to acquire
-    } else if (ticketSizeMin >= 1000000) {
-      ticketMultiplier = 1.6; // HNI segment
-    } else if (ticketSizeMin >= 100000) {
-      ticketMultiplier = 1.1; // Mass Affluent High end
-    } else if (ticketSizeMin < 10000) {
-      ticketMultiplier = 0.6; // Mass retail segment
-    }
-
-    // Adjust for Confidence tiers
+    // Confidence multiplier (High match quality is slightly tighter CPL)
     let confidenceMultiplier = 1.0;
-    if (confidence === 'High') {
-      confidenceMultiplier = 1.4;
-    } else if (confidence === 'Medium') {
-      confidenceMultiplier = 0.95;
-    } else {
-      confidenceMultiplier = 1.15;
-    }
+    if (confidence === 'High') confidenceMultiplier = 1.1;
+    else if (confidence === 'Medium') confidenceMultiplier = 0.92;
+    else confidenceMultiplier = 1.0;
 
-    // Purchase & Sale Cycle multipliers
-    let cycleMultiplier = 1.0;
-    if (purchaseCycle === 'One-time') {
-      if (avgSaleCycle === '1 Day') cycleMultiplier = 0.85;
-      else if (avgSaleCycle === '1 Month') cycleMultiplier = 1.25; // long cycle high-value
-    } else {
-      if (avgSaleCycle === '1 Month') cycleMultiplier = 1.1;
-    }
-
-    // Geographies density
-    let geoMultiplier = 0;
+    // Geo density multiplier (More metros slightly improve scale)
+    let geoMultiplier = 1.0;
     if (selectedGeographies.length > 0) {
-      selectedGeographies.forEach(city => {
-        if (city === "Mumbai" || city === "Delhi NCR") geoMultiplier += 0.35;
-        else if (city === "Bengaluru" || city === "Pune") geoMultiplier += 0.25;
-        else geoMultiplier += 0.18;
-      });
-      geoMultiplier = Math.min(geoMultiplier, 1.4);
+      const geoCount = selectedGeographies.length;
+      if (geoCount >= 4) geoMultiplier = 0.92;
+      else if (geoCount === 1) geoMultiplier = 1.08;
     }
 
-    const exclusionMultiplier = (excludeDelivered ? 0.92 : 1.0) * (excludeExisting ? 0.95 : 1.0);
+    // Exclusions factor
+    const exclusionMultiplier = (excludeDelivered ? 1.02 : 0.98) * (excludeExisting ? 1.02 : 0.98);
 
-    const calculatedCPL = baseCPL * categoryMultiplier * ticketMultiplier * confidenceMultiplier * cycleMultiplier * geoMultiplier * exclusionMultiplier;
+    // Expected Forecast CAC (rounded to nearest 10)
+    const expectedCAC = Math.round((baseCAC * categoryMultiplier * confidenceMultiplier * geoMultiplier * exclusionMultiplier) / 10) * 10;
 
-    // Check for Zero Match conditions:
+    // Check Zero-match conditions
     let isZeroMatch = false;
     let zeroMatchReason = "";
 
-    if (selectedCategories.length === 0) {
+    if (!name.trim()) {
       isZeroMatch = true;
-      zeroMatchReason = "At least one category vertical (e.g. Golf) must be selected.";
-    } else if (selectedGeographies.length === 0) {
+      zeroMatchReason = "Please enter a valid campaign name.";
+    } else if (!targetCAC || targetCAC <= 0) {
       isZeroMatch = true;
-      zeroMatchReason = "At least one geography metro must be target-listed.";
-    } else if (budgetPerDay <= 0) {
-      isZeroMatch = true;
-      zeroMatchReason = "Daily budget must be greater than ₹0.";
-    } else if (ticketSizeMin > ticketSizeMax) {
-      isZeroMatch = true;
-      zeroMatchReason = "Minimum product ticket size cannot exceed maximum ticket size.";
+      zeroMatchReason = "Target CAC must be greater than ₹0.";
     } else if (targetCAC < 300) {
       isZeroMatch = true;
-      zeroMatchReason = `Target CAC of ₹${targetCAC} is below bidding threshold for modern client acquisition. Minimum allowed is ₹300.`;
-    } else if (targetCAC < calculatedCPL * 0.4) {
+      zeroMatchReason = "Target CAC is below the minimum network bidding floor of ₹300 per prospect.";
+    } else if (!businessLine) {
       isZeroMatch = true;
-      zeroMatchReason = `The requested target CAC of ₹${targetCAC} is too restrictive for ${productSector} with product ticket size of ₹${ticketSizeMin.toLocaleString('en-IN')}. Estimated min viable CAC is ₹${Math.round(calculatedCPL * 0.6)}.`;
+      zeroMatchReason = "Please select a target business line.";
+    } else if (selectedGeographies.length === 0) {
+      isZeroMatch = true;
+      zeroMatchReason = "At least one target geography metro must be selected.";
+    } else if (budgetPerDay <= 0) {
+      isZeroMatch = true;
+      zeroMatchReason = "Budget per day must be greater than ₹0.";
+    } else if (durationDays < 1) {
+      isZeroMatch = true;
+      zeroMatchReason = "Duration must be at least 1 day.";
+    } else if (totalBudgetCap !== '' && totalBudgetCap < budgetPerDay) {
+      isZeroMatch = true;
+      zeroMatchReason = "Total budget cap cannot be less than daily budget.";
     }
 
     if (isZeroMatch) {
@@ -255,552 +260,725 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onCancel, onSa
         leadsPerDay: 0,
         totalLeads: 0,
         totalSpend: 0,
+        expectedCAC,
+        isWithinTarget: false,
         isZeroMatch: true,
         zeroMatchReason
       };
     }
 
-    // Estimate leads/day. Since Target CAC is provided, we can estimate leads based on budget and Target CAC, adjusted by how "realistic" it is
-    const efficiency = Math.min(1.0, targetCAC / calculatedCPL);
-    let estLeadsPerDay = (budgetPerDay / targetCAC) * efficiency;
-
-    // Clamp
-    if (estLeadsPerDay < 0.1) estLeadsPerDay = 0.1;
-
-    let estTotalSpend = budgetPerDay * durationInDays;
-    if (totalBudgetCap !== '' && totalBudgetCap > 0 && totalBudgetCap < estTotalSpend) {
-      estTotalSpend = totalBudgetCap;
+    // Lead calculations based on budget and target CAC / expected CAC
+    const effectiveCACForPacing = Math.max(targetCAC, Math.round(expectedCAC * 0.92));
+    const leadsPerDay = Math.max(0.1, Math.round((budgetPerDay / effectiveCACForPacing) * 10) / 10);
+    
+    let totalSpend = budgetPerDay * durationDays;
+    if (totalBudgetCap !== '' && totalBudgetCap > 0 && totalBudgetCap < totalSpend) {
+      totalSpend = totalBudgetCap;
     }
 
-    const estTotalLeads = Math.max(1, Math.round(estTotalSpend / targetCAC * efficiency));
+    const totalLeads = Math.max(1, Math.round(totalSpend / effectiveCACForPacing));
+    const isWithinTarget = expectedCAC <= targetCAC;
 
     return {
-      leadsPerDay: Math.round(estLeadsPerDay * 10) / 10,
-      totalLeads: estTotalLeads,
-      totalSpend: estTotalSpend,
+      leadsPerDay,
+      totalLeads,
+      totalSpend,
+      expectedCAC,
+      isWithinTarget,
       isZeroMatch: false,
       zeroMatchReason: ""
     };
   }, [
-    selectedCategories,
-    productSector,
-    confidence,
-    ticketSizeMin,
-    ticketSizeMax,
-    purchaseCycle,
-    avgSaleCycle,
+    name,
+    targetCAC,
+    businessLine,
     selectedGeographies,
-    excludeDelivered,
-    excludeExisting,
     budgetPerDay,
+    durationDays,
     totalBudgetCap,
-    durationInDays,
-    targetCAC
+    selectedCategories,
+    confidence,
+    excludeDelivered,
+    excludeExisting
   ]);
 
-  // Handle Category select/deselect
+  // Validation status
+  const isFormValid = useMemo(() => {
+    if (!name.trim()) return false;
+    if (!targetCAC || targetCAC <= 0) return false;
+    if (!businessLine) return false;
+    if (selectedGeographies.length === 0) return false;
+    if (budgetPerDay <= 0) return false;
+    if (durationDays < 1) return false;
+    if (totalBudgetCap !== '' && totalBudgetCap < budgetPerDay) return false;
+    return true;
+  }, [name, targetCAC, businessLine, selectedGeographies, budgetPerDay, durationDays, totalBudgetCap]);
+
+  // Helpers
   const toggleCategory = (cat: string) => {
-    if (selectedCategories.includes(cat)) {
-      setSelectedCategories(selectedCategories.filter(c => c !== cat));
-    } else {
-      setSelectedCategories([...selectedCategories, cat]);
-    }
+    setSelectedCategories(prev => 
+      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+    );
   };
 
-  // Helper to apply budget templates and default to a 30-day window
-  const applyBudgetTemplate = (amount: number) => {
-    setBudgetPerDay(amount);
-    const today = new Date('2026-09-21'); // Aligned with metadata
-    const end = new Date('2026-09-21');
-    end.setDate(end.getDate() + 29); // 30 days inclusive
-    
-    setStartDate(today.toISOString().split('T')[0]);
-    setEndDate(end.toISOString().split('T')[0]);
-  };
-
-  // Handle Geography adding
   const addGeography = (city: string) => {
     if (!selectedGeographies.includes(city)) {
-      setSelectedGeographies([...selectedGeographies, city]);
+      setSelectedGeographies(prev => [...prev, city]);
     }
     setGeoSearchQuery('');
     setGeoDropdownOpen(false);
   };
 
-  // Handle Geography removal
   const removeGeography = (city: string) => {
-    setSelectedGeographies(selectedGeographies.filter(c => c !== city));
+    setSelectedGeographies(prev => prev.filter(c => c !== city));
   };
 
-  // Handle Save
-  const handleAction = (status: 'Active' | 'Draft') => {
-    if (!name.trim()) {
-      setNameError('Campaign name is required.');
+  const applyBudgetTemplate = (amt: number) => {
+    setBudgetPerDay(amt);
+    setDurationDays(30);
+  };
+
+  // Submit / Launch
+  const handleSubmit = (status: 'Active' | 'Draft') => {
+    setTouched({
+      name: true,
+      targetCAC: true,
+      businessLine: true,
+      geographies: true,
+      budgetPerDay: true,
+      durationDays: true,
+      totalBudgetCap: true
+    });
+
+    if (!isFormValid && status === 'Active') {
       return;
     }
-    
-    onSave({
+
+    const campaignToSave: Campaign = {
       id: 'CAMP-' + Math.floor(Math.random() * 90000 + 10000),
-      name: name.trim(),
-      industry: "Wealth Management",
-      categories: selectedCategories,
-      confidence,
-      personas: derivedPersonas, // Mapped automatically
-      geographies: selectedGeographies,
-      excludeDelivered,
-      excludeExisting,
-      budgetPerDay,
+      name: name.trim() || 'Untitled Campaign',
+      industry: clientProfile.industry,
+      businessLine: businessLine,
+      categories: selectedCategories.length > 0 ? selectedCategories : ["Golf", "Luxury Automobiles"],
+      confidence: confidence,
+      personas: clientProfile.ticketSize >= 1000000 ? ["UHNI", "HNI"] : ["HNI", "Mass affluent"],
+      geographies: selectedGeographies.length > 0 ? selectedGeographies : ["Mumbai"],
+      excludeDelivered: excludeDelivered,
+      excludeExisting: excludeExisting,
+      budgetPerDay: budgetPerDay || 5000,
       totalBudgetCap: totalBudgetCap,
-      startDate,
-      endDate,
+      startDate: startDate,
+      endDate: endDate,
+      duration: durationDays,
       notes: notes.trim(),
-      status: status === 'Active' ? (new Date(startDate) > new Date('2026-09-21') ? 'Scheduled' : 'Active') : 'Draft',
+      status: status === 'Active' ? (new Date(startDate) > new Date('2026-09-22') ? 'Scheduled' : 'Active') : 'Draft',
       createdAt: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
       metrics: {
         estLeadsPerDay: forecast.leadsPerDay,
         estTotalLeads: forecast.totalLeads,
-        estTotalSpend: forecast.totalSpend
+        estTotalSpend: forecast.totalSpend,
+        estCAC: forecast.expectedCAC
       },
       currentSpend: 0,
       leadsAcquired: 0,
       owner: "Sidhartha R.",
-      // Pass the new fields for detail popups / completeness
-      targetCAC,
-      productSector,
-      ticketSizeMin,
-      ticketSizeMax,
-      purchaseCycle,
-      avgSaleCycle
-    });
+      targetCAC: targetCAC || 2500,
+      productSector: businessLine,
+      ticketSizeMin: Math.round(clientProfile.ticketSize * 0.7),
+      ticketSizeMax: Math.round(clientProfile.ticketSize * 1.5),
+      purchaseCycle: clientProfile.purchaseChannel === 'Both' ? 'Recurring subscription' : 'One-time',
+      avgSaleCycle: '1 Week'
+    };
+
+    onSave(campaignToSave);
+  };
+
+  // Format currency display
+  const formatTicketSize = (amt: number) => {
+    if (amt >= 10000000) {
+      return `₹${(amt / 10000000).toFixed(amt % 10000000 === 0 ? 0 : 1)} Cr`;
+    }
+    if (amt >= 100000) {
+      return `₹${(amt / 100000).toFixed(amt % 100000 === 0 ? 0 : 1)}L`;
+    }
+    return `₹${amt.toLocaleString('en-IN')}`;
   };
 
   return (
-    <div className="space-y-6 pb-12 select-none font-sans w-full">
-      {/* Visual Navigation Breadcrumbs */}
+    <div className="space-y-6 pb-16 select-none font-sans max-w-5xl mx-auto w-full">
+      {/* Breadcrumbs */}
       <div className="flex items-center gap-2 text-xs text-neutral-400 font-semibold mb-2">
         <span className="hover:text-neutral-700 cursor-pointer transition-colors" onClick={onCancel}>Lead Gen</span>
         <ChevronRight size={12} />
-        <span className="text-neutral-900">Campaign builder</span>
+        <span className="text-neutral-900 font-bold">Campaign builder</span>
       </div>
 
       {/* Hero Header */}
-      <div className="border-b border-neutral-200/50 pb-5">
-        <h2 className="text-xl font-bold text-neutral-900 tracking-tight">Create target campaign</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-neutral-200/70 pb-4">
+        <div>
+          <h2 className="text-xl font-extrabold text-neutral-900 tracking-tight">Create Target Campaign</h2>
+          <p className="text-xs text-neutral-500 mt-0.5">Target-first campaign setup powered by your verified client profile.</p>
+        </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-xs font-semibold text-neutral-500 hover:text-neutral-800 transition-colors self-start sm:self-auto cursor-pointer"
+        >
+          Cancel & Exit
+        </button>
       </div>
 
-      {/* Dual column workspace */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        
-        {/* Left Column: Targeting configuration */}
-        <div className="lg:col-span-7 space-y-6">
-          
-          {/* Section A: Name & Context */}
-          <div className="bg-white border border-neutral-200/60 rounded-xl p-6 shadow-sm space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="inline-flex items-center text-xs font-bold text-neutral-700 uppercase tracking-wide mb-1.5">
-                  <span>Campaign name</span> <span className="text-red-500 ml-1">*</span>
-                  <InfoTooltip content="Provide a unique, descriptive name to identify and track this campaign inside reports and campaign list views." />
-                </label>
-                <input 
-                  type="text" 
-                  value={name}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    if (e.target.value.trim()) setNameError('');
-                  }}
-                  placeholder="e.g. Zenith HNI Festives"
-                  className={`w-full px-3.5 py-2 text-xs bg-neutral-50/50 border ${
-                    nameError ? 'border-red-400 focus:ring-red-400/25' : 'border-neutral-200 focus:ring-[#3b82f6]/25'
-                  } rounded-lg text-neutral-800 placeholder-neutral-400 font-medium focus:outline-none focus:ring-2 focus:bg-white transition-all`}
-                />
-                {nameError && (
-                  <p className="text-[10px] text-red-500 font-bold mt-1.5 flex items-center gap-1">
-                    <AlertTriangle size={11} /> {nameError}
-                  </p>
-                )}
-              </div>
+      {/* 1. Client Profile Strip (Read-only) */}
+      <div className="bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 text-white rounded-xl p-4 shadow-sm border border-neutral-700/60 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0">
+            <Building2 size={18} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold tracking-wide text-neutral-200 truncate">{clientProfile.name}</span>
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-neutral-400 bg-white/10 px-2 py-0.5 rounded">
+                <Lock size={10} className="text-neutral-400" /> Read-only
+              </span>
+            </div>
+            <div className="text-xs text-neutral-300 font-medium flex items-center gap-2 mt-0.5 flex-wrap">
+              <span><strong className="text-white font-bold">{clientProfile.industry}</strong></span>
+              <span className="text-neutral-500">•</span>
+              <span>Ticket size: <strong className="text-white font-bold">{formatTicketSize(clientProfile.ticketSize)}</strong></span>
+              <span className="text-neutral-500">•</span>
+              <span>Channel: <strong className="text-white font-bold">{clientProfile.purchaseChannel}</strong></span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 pt-1 md:pt-0 border-t md:border-t-0 border-neutral-700/60 shrink-0">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-blue-400 bg-blue-500/10 border border-blue-400/25 px-2.5 py-1 rounded-md">
+            <span>Managed in Client Onboarding</span>
+          </span>
+        </div>
+      </div>
 
-              <div>
-                <label className="inline-flex items-center text-xs font-bold text-neutral-400 uppercase tracking-wide mb-1.5">
-                  <span>Client industry</span>
-                  <InfoTooltip content="The pre-filled client industry sector derived from onboarding private banking profiles." />
-                </label>
-                <div className="flex h-9 items-center">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#1e3a8a] bg-[#1e3a8a]/5 border border-[#1e3a8a]/10 rounded-lg">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#1e3a8a]" />
-                    Wealth Management
-                  </span>
+      {/* Main Campaign Configuration Card */}
+      <div className="bg-white border border-neutral-200/80 rounded-2xl p-6 sm:p-7 shadow-sm space-y-7">
+        
+        {/* 2. Campaign Name */}
+        <div>
+          <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
+            <span>Campaign name</span> <span className="text-red-500 ml-1">*</span>
+            <InfoTooltip content="A descriptive identifier for this campaign in reporting tables and lead acquisition logs." />
+          </label>
+          <input 
+            type="text" 
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              setTouched(prev => ({ ...prev, name: true }));
+            }}
+            placeholder="e.g. Zenith Festive Luxury Drive 2026"
+            className={`w-full px-4 py-2.5 text-xs bg-neutral-50/70 border ${
+              touched.name && !name.trim() 
+                ? 'border-red-400 focus:ring-red-400/25' 
+                : 'border-neutral-200 focus:border-blue-500 focus:ring-blue-500/20'
+            } rounded-xl text-neutral-900 placeholder-neutral-400 font-semibold focus:outline-none focus:ring-2 focus:bg-white transition-all`}
+          />
+          {touched.name && !name.trim() && (
+            <p className="text-[11px] text-red-500 font-bold mt-1.5 flex items-center gap-1">
+              <AlertTriangle size={12} /> Campaign name is required.
+            </p>
+          )}
+        </div>
+
+        {/* 3. Target CAC (Large Currency Input placed first) */}
+        <div className="bg-blue-50/40 border border-blue-200/60 rounded-xl p-5 space-y-2">
+          <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
+            <span>Target CAC</span> <span className="text-red-500 ml-1">*</span>
+            <InfoTooltip content="The maximum acquisition cost per prospect you are willing to spend. Used as the benchmark for pacing and match quality." />
+          </label>
+          
+          <div className="relative">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 font-extrabold text-lg">₹</span>
+            <input 
+              type="number" 
+              value={targetCAC || ''}
+              onChange={(e) => {
+                const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                setTargetCAC(val);
+                setTouched(prev => ({ ...prev, targetCAC: true }));
+              }}
+              placeholder="e.g. 2500"
+              className={`w-full pl-9 pr-4 py-3 text-lg font-bold bg-white border ${
+                touched.targetCAC && (!targetCAC || targetCAC <= 0)
+                  ? 'border-red-400 focus:ring-red-400/25'
+                  : 'border-blue-300/80 focus:border-blue-600 focus:ring-blue-500/20'
+              } rounded-xl text-neutral-900 focus:outline-none focus:ring-3 transition-all`}
+            />
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[11px] pt-1">
+            <p className="text-neutral-500 font-medium">
+              What you're willing to pay per prospect.
+            </p>
+            <p className="text-neutral-600 font-semibold flex items-center gap-1">
+              <span>Your last 30 days avg:</span>
+              <span className="inline-flex items-center text-neutral-900 font-bold bg-white px-2 py-0.5 rounded border border-neutral-200 shadow-2xs">
+                ₹2,450
+              </span>
+            </p>
+          </div>
+
+          {touched.targetCAC && (!targetCAC || targetCAC <= 0) && (
+            <p className="text-[11px] text-red-500 font-bold flex items-center gap-1">
+              <AlertTriangle size={12} /> Target CAC must be greater than ₹0.
+            </p>
+          )}
+        </div>
+
+        {/* 4. Business Line (Single-select scoped to client profile) */}
+        <div>
+          <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
+            <span>Business line</span> <span className="text-red-500 ml-1">*</span>
+            <InfoTooltip content="Scoped to your onboarded business lines. Replaces general product sectors to match your actual operational scope." />
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            {clientProfile.businessLines.map((line) => {
+              const isSelected = businessLine === line;
+              return (
+                <button
+                  key={line}
+                  type="button"
+                  onClick={() => {
+                    setBusinessLine(line);
+                    setTouched(prev => ({ ...prev, businessLine: true }));
+                  }}
+                  className={`px-3.5 py-2.5 text-xs font-bold rounded-xl border transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-neutral-900 text-white border-neutral-900 shadow-xs'
+                      : 'bg-neutral-50/70 text-neutral-700 border-neutral-200 hover:bg-neutral-100 hover:text-neutral-900'
+                  }`}
+                >
+                  {isSelected && <Check size={13} className="shrink-0 stroke-[3]" />}
+                  <span>{line}</span>
+                </button>
+              );
+            })}
+          </div>
+          {touched.businessLine && !businessLine && (
+            <p className="text-[11px] text-red-500 font-bold mt-1.5 flex items-center gap-1">
+              <AlertTriangle size={12} /> Please select a business line.
+            </p>
+          )}
+        </div>
+
+        {/* 5. Geography (Searchable multi-select) */}
+        <div className="space-y-2">
+          <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
+            <span>Geography Metros</span> <span className="text-red-500 ml-1">*</span>
+            <InfoTooltip content="Filter leads residing or conducting transactions in these designated target metro markets." />
+          </label>
+
+          {/* Selected city tags */}
+          {selectedGeographies.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {selectedGeographies.map(city => (
+                <span key={city} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 text-xs font-bold bg-neutral-100 text-neutral-800 rounded-lg border border-neutral-200 shadow-2xs">
+                  {city}
+                  <button 
+                    type="button" 
+                    onClick={() => removeGeography(city)}
+                    className="p-0.5 text-neutral-400 hover:text-neutral-800 hover:bg-neutral-200 rounded transition-colors cursor-pointer"
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Search box & Dropdown */}
+          <div className="relative">
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+            <input 
+              type="text"
+              placeholder="Search and add metro cities (e.g. Mumbai, Bengaluru)..."
+              value={geoSearchQuery}
+              onFocus={() => setGeoDropdownOpen(true)}
+              onChange={(e) => {
+                setGeoSearchQuery(e.target.value);
+                setGeoDropdownOpen(true);
+              }}
+              className="w-full pl-9 pr-4 py-2.5 text-xs bg-neutral-50/70 focus:bg-white border border-neutral-200 rounded-xl text-neutral-900 placeholder-neutral-400 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+            />
+
+            {geoDropdownOpen && (
+              <div className="absolute left-0 right-0 mt-1 bg-white border border-neutral-200 rounded-xl shadow-xl z-50 py-1.5 max-h-48 overflow-y-auto">
+                {filteredGeographies.length > 0 ? (
+                  filteredGeographies.map(city => (
+                    <button
+                      key={city}
+                      type="button"
+                      onClick={() => addGeography(city)}
+                      className="w-full text-left px-3.5 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 transition-colors cursor-pointer flex items-center justify-between"
+                    >
+                      <span>{city}</span>
+                      <span className="text-[10px] text-blue-600 font-bold">+ Add</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-3.5 py-2 text-xs text-neutral-400 text-center">
+                    No matching metro cities available
+                  </div>
+                )}
+                <div className="border-t border-neutral-100 mt-1 pt-1 px-2">
+                  <button 
+                    type="button"
+                    onClick={() => setGeoDropdownOpen(false)}
+                    className="w-full text-center py-1 text-[10px] font-bold text-neutral-400 hover:text-neutral-700 uppercase tracking-wider cursor-pointer"
+                  >
+                    Close dropdown
+                  </button>
                 </div>
               </div>
+            )}
+          </div>
+
+          {selectedGeographies.length === 0 && touched.geographies && (
+            <p className="text-[11px] text-red-500 font-bold mt-1 flex items-center gap-1">
+              <AlertTriangle size={12} /> Please select at least one geography.
+            </p>
+          )}
+        </div>
+
+        {/* 6. Budget Templates, Budget per Day & Duration */}
+        <div className="space-y-4 pt-1">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
+                <span>Budget templates</span>
+                <InfoTooltip content="One-click presets that configure standard daily pacing and a 30-day campaign schedule." />
+              </label>
+              <span className="text-[11px] text-neutral-400 font-medium">Quick presets</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[5000, 10000, 25000].map((amt) => {
+                const isSelected = budgetPerDay === amt;
+                return (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => applyBudgetTemplate(amt)}
+                    className={`px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50 hover:text-neutral-900'
+                    }`}
+                  >
+                    ₹{amt.toLocaleString('en-IN')} / day
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Section B: Filters (Targeting) */}
-          <div className="bg-white border border-neutral-200/60 rounded-xl p-6 shadow-sm space-y-6">
-            <h3 className="text-xs font-bold text-neutral-800 uppercase tracking-wide border-b border-neutral-100 pb-2">
-              Targeting Parameters
-            </h3>
-
-            {/* Target CAC & Product Sector */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="inline-flex items-center text-xs font-bold text-neutral-700 uppercase tracking-wide mb-1.5">
-                  <span>Target CAC (₹)</span> <span className="text-red-500 ml-1">*</span>
-                  <InfoTooltip content="The cost-per-acquisition target limit the client commits to upfront. Sits alongside confidence." />
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-xs">₹</span>
-                  <input 
-                    type="number" 
-                    value={targetCAC}
-                    onChange={(e) => {
-                      const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                      setTargetCAC(val);
-                    }}
-                    placeholder="e.g. 2500"
-                    className="w-full pl-7 pr-3.5 py-2 text-xs bg-neutral-50/50 focus:bg-white border border-neutral-200 rounded-lg text-neutral-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 transition-all"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="inline-flex items-center text-xs font-bold text-neutral-700 uppercase tracking-wide mb-1.5">
-                  <span>Product sector</span>
-                  <InfoTooltip content="Specific financial product line to target. Keeps parameters product-centric." />
-                </label>
-                <select
-                  value={productSector}
-                  onChange={(e) => setProductSector(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-neutral-50/50 focus:bg-white border border-neutral-200 rounded-lg text-neutral-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 transition-all"
-                >
-                  {ALL_PRODUCT_SECTORS.map(sec => (
-                    <option key={sec} value={sec}>{sec}</option>
-                  ))}
-                </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
+                <span>Budget per day (₹)</span> <span className="text-red-500 ml-1">*</span>
+                <InfoTooltip content="Daily marketing capital dedicated to lead matches. Higher pacing secures greater target volume." />
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-xs">₹</span>
+                <input 
+                  type="number" 
+                  value={budgetPerDay || ''}
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                    setBudgetPerDay(val);
+                    setTouched(prev => ({ ...prev, budgetPerDay: true }));
+                  }}
+                  placeholder="e.g. 10000"
+                  className={`w-full pl-7 pr-3.5 py-2.5 text-xs bg-neutral-50/70 focus:bg-white border ${
+                    touched.budgetPerDay && budgetPerDay <= 0 ? 'border-red-400' : 'border-neutral-200 focus:border-blue-500'
+                  } rounded-xl text-neutral-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all`}
+                />
               </div>
             </div>
 
-            {/* Confidence Segmented Control */}
             <div>
-              <label className="inline-flex items-center text-xs font-bold text-neutral-700 uppercase tracking-wide mb-2.5">
-                <span>Confidence tier</span>
-                <InfoTooltip content="Adjust match quality precision threshold vs lead volume density. Selecting Both returns optimal balance." />
+              <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
+                <span>Duration (Days)</span> <span className="text-red-500 ml-1">*</span>
+                <InfoTooltip content="Total planned campaign duration window in calendar days. Defaults to 30 days." />
               </label>
-              <div className="grid grid-cols-3 gap-1.5 bg-neutral-100/80 p-1 rounded-lg">
-                {(['High', 'Medium', 'Both'] as const).map((tier) => {
-                  const isSelected = confidence === tier;
-                  return (
-                    <button
-                      key={tier}
-                      type="button"
-                      onClick={() => setConfidence(tier)}
-                      className={`py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer select-none ${
-                        isSelected 
-                          ? 'bg-white text-neutral-900 shadow-sm'
-                          : 'text-neutral-500 hover:text-neutral-800'
-                      }`}
-                    >
-                      {tier}
-                    </button>
-                  );
-                })}
+              <div className="relative">
+                <Calendar size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+                <input 
+                  type="number" 
+                  min={1}
+                  value={durationDays || ''}
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? 1 : parseInt(e.target.value, 10);
+                    setDurationDays(val);
+                    setTouched(prev => ({ ...prev, durationDays: true }));
+                  }}
+                  placeholder="30"
+                  className="w-full pl-9 pr-3.5 py-2.5 text-xs bg-neutral-50/70 focus:bg-white border border-neutral-200 rounded-xl text-neutral-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                />
               </div>
-            </div>
-
-            {/* Categories Multi-Select Chips */}
-            <div>
-              <label className="inline-flex items-center text-xs font-bold text-neutral-700 uppercase tracking-wide mb-2.5">
-                <span>Vertical Categories Scope</span>
-                <InfoTooltip content="Tag and associate matched leads showing verified affinity with these luxury/premium vertical tags." />
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {ALL_CATEGORIES.map((cat) => {
-                  const isSelected = selectedCategories.includes(cat);
-                  return (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => toggleCategory(cat)}
-                      className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer select-none active:scale-95 ${
-                        isSelected 
-                          ? 'bg-[#1e3a8a] text-white border-transparent shadow-sm'
-                          : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50 hover:text-neutral-900'
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Ticket-size range */}
-            <div>
-              <label className="inline-flex items-center text-xs font-bold text-neutral-700 uppercase tracking-wide mb-1.5">
-                <span>Product Ticket-Size Range (₹)</span>
-                <InfoTooltip content="Defines boundary values of targeted products to restrict lead scopes based on cost parameters." />
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-xs">Min</span>
-                  <input 
-                    type="number" 
-                    value={ticketSizeMin}
-                    onChange={(e) => {
-                      const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                      setTicketSizeMin(val);
-                    }}
-                    placeholder="Min Value"
-                    className="w-full pl-11 pr-3.5 py-2 text-xs bg-neutral-50/50 focus:bg-white border border-neutral-200 rounded-lg text-neutral-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 transition-all"
-                  />
-                </div>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-xs">Max</span>
-                  <input 
-                    type="number" 
-                    value={ticketSizeMax}
-                    onChange={(e) => {
-                      const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                      setTicketSizeMax(val);
-                    }}
-                    placeholder="Max Value"
-                    className="w-full pl-11 pr-3.5 py-2 text-xs bg-neutral-50/50 focus:bg-white border border-neutral-200 rounded-lg text-neutral-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 transition-all"
-                  />
-                </div>
-              </div>
-              <p className="text-[10px] text-neutral-400 mt-1.5">
-                Targeting leads interested in products priced between <strong className="text-neutral-700">₹{(ticketSizeMin / 100000).toFixed(1)} Lakhs</strong> and <strong className="text-neutral-700">₹{(ticketSizeMax / 100000).toFixed(1)} Lakhs</strong>.
+              <p className="text-[10px] text-neutral-400 mt-1">
+                Runs from <strong className="text-neutral-700">{startDate}</strong> to <strong className="text-neutral-700">{endDate}</strong> ({durationDays} days).
               </p>
             </div>
+          </div>
+        </div>
 
-            {/* Purchase & Avg. Sale Cycle checks */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <div>
-                <label className="inline-flex items-center text-xs font-bold text-neutral-700 uppercase tracking-wide mb-1.5">
-                  <span>Purchase Cycle</span>
-                  <InfoTooltip content="Sanity check parameter indicating if this is a one-time transaction or a recurring service model." />
-                </label>
-                <select
-                  value={purchaseCycle}
-                  onChange={(e) => setPurchaseCycle(e.target.value as any)}
-                  className="w-full px-3 py-2 text-xs bg-neutral-50/50 focus:bg-white border border-neutral-200 rounded-lg text-neutral-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 transition-all"
-                >
-                  <option value="One-time">One-time purchase</option>
-                  <option value="Recurring subscription">Recurring subscription</option>
-                </select>
+        {/* 7. Forecast Tiles (4 Tiles including Est. CAC vs Target) */}
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-blue-600 uppercase tracking-wider">
+              <Sparkles size={14} />
+              <span>Live Targeting Forecast</span>
+            </div>
+            <span className="text-[11px] text-neutral-400 font-medium">Real-time projection</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            
+            {/* Tile 1: Est. leads / day */}
+            <div className="bg-neutral-50/80 border border-neutral-200/80 rounded-xl p-4 flex flex-col justify-between">
+              <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider">
+                Est. leads / day
+              </span>
+              <div className="mt-2 flex items-baseline justify-between">
+                <span className="text-2xl font-black text-neutral-900 tracking-tight">
+                  {forecast.leadsPerDay}
+                </span>
+                <span className="text-[10px] font-semibold text-neutral-500 bg-neutral-200/60 px-1.5 py-0.5 rounded">
+                  Daily pacing
+                </span>
+              </div>
+            </div>
+
+            {/* Tile 2: Est. total leads */}
+            <div className="bg-neutral-50/80 border border-neutral-200/80 rounded-xl p-4 flex flex-col justify-between">
+              <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider">
+                Est. total leads
+              </span>
+              <div className="mt-2 flex items-baseline justify-between">
+                <span className="text-2xl font-black text-neutral-900 tracking-tight">
+                  {forecast.totalLeads.toLocaleString('en-IN')}
+                </span>
+                <span className="text-[10px] font-semibold text-neutral-500 bg-neutral-200/60 px-1.5 py-0.5 rounded">
+                  {durationDays}d total
+                </span>
+              </div>
+            </div>
+
+            {/* Tile 3: Est. total spend */}
+            <div className="bg-neutral-50/80 border border-neutral-200/80 rounded-xl p-4 flex flex-col justify-between">
+              <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider">
+                Est. total spend
+              </span>
+              <div className="mt-2 flex items-baseline justify-between">
+                <span className="text-2xl font-black text-neutral-900 tracking-tight">
+                  ₹{forecast.totalSpend.toLocaleString('en-IN')}
+                </span>
+                <span className="text-[10px] font-semibold text-neutral-500 bg-neutral-200/60 px-1.5 py-0.5 rounded">
+                  Max spend
+                </span>
+              </div>
+            </div>
+
+            {/* Tile 4: Est. CAC vs Target (NEW 4th tile) */}
+            <div className={`border rounded-xl p-4 flex flex-col justify-between transition-all ${
+              forecast.isWithinTarget
+                ? 'bg-emerald-50/70 border-emerald-300/80 text-emerald-950'
+                : 'bg-amber-50/70 border-amber-300/80 text-amber-950'
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                  forecast.isWithinTarget ? 'text-emerald-700' : 'text-amber-700'
+                }`}>
+                  Est. CAC vs Target
+                </span>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+                  forecast.isWithinTarget 
+                    ? 'bg-emerald-600 text-white' 
+                    : 'bg-amber-600 text-white'
+                }`}>
+                  {forecast.isWithinTarget ? (
+                    <Check size={12} className="stroke-[3]" />
+                  ) : (
+                    <AlertTriangle size={12} className="stroke-[3]" />
+                  )}
+                </div>
               </div>
 
+              <div className="mt-2">
+                <div className="flex items-baseline gap-2">
+                  <span className={`text-xl font-black tracking-tight ${
+                    forecast.isWithinTarget ? 'text-emerald-900' : 'text-amber-900'
+                  }`}>
+                    ₹{forecast.expectedCAC.toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-[11px] text-neutral-500 font-medium">
+                    (Target: ₹{targetCAC.toLocaleString('en-IN')})
+                  </span>
+                </div>
+                <p className={`text-[10.5px] font-semibold mt-1 leading-snug ${
+                  forecast.isWithinTarget ? 'text-emerald-700' : 'text-amber-800'
+                }`}>
+                  At this targeting, expected CAC is ₹{forecast.expectedCAC.toLocaleString('en-IN')}.
+                </p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* 8. Zero-Match Warning (only when relevant) */}
+        {forecast.isZeroMatch && (
+          <div className="bg-amber-50 border border-amber-300/90 rounded-xl p-4 text-amber-900 space-y-1">
+            <div className="flex items-center gap-2 text-xs font-bold text-amber-800">
+              <AlertTriangle size={16} />
+              <span>Zero-Match Targeting Warning</span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-amber-700 font-medium">
+              {forecast.zeroMatchReason} Adjust your targeting criteria, target CAC, or budget parameters to enable campaign launch.
+            </p>
+          </div>
+        )}
+
+        {/* 9. Advanced Settings (Collapsible section, closed by default) */}
+        <div className="border border-neutral-200/80 rounded-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="w-full px-5 py-3.5 bg-neutral-50 hover:bg-neutral-100/70 transition-colors flex items-center justify-between text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-2.5">
+              <SlidersHorizontal size={14} className="text-neutral-500" />
+              <span className="text-xs font-bold text-neutral-800 uppercase tracking-wide">
+                Advanced settings
+              </span>
+              <span className="text-[10px] font-semibold text-neutral-500 bg-white border border-neutral-200 px-2 py-0.5 rounded-full">
+                Secondary controls · Optional
+              </span>
+            </div>
+            <div className="flex items-center gap-1 text-xs text-neutral-500 font-medium">
+              <span>{showAdvanced ? 'Hide controls' : 'Show controls'}</span>
+              {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </div>
+          </button>
+
+          {showAdvanced && (
+            <div className="p-5 sm:p-6 bg-white space-y-6 border-t border-neutral-200/80">
+              
+              {/* Category (Multi-select chips) */}
               <div>
-                <label className="inline-flex items-center text-xs font-bold text-neutral-700 uppercase tracking-wide mb-1.5">
-                  <span>Avg. Sale Cycle</span>
-                  <InfoTooltip content="The average timeframe taken from initial touchpoint to final client conversion." />
+                <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-2">
+                  <span>Category Affinity Scope</span>
+                  <InfoTooltip content="Associate prospect match criteria with these high-affinity lifestyle and luxury verticals." />
                 </label>
-                <div className="grid grid-cols-3 gap-1.5 bg-neutral-100/80 p-1 rounded-lg">
-                  {(['1 Day', '1 Week', '1 Month'] as const).map((cycle) => {
-                    const isSelected = avgSaleCycle === cycle;
+                <div className="flex flex-wrap gap-1.5">
+                  {ALL_CATEGORIES.map((cat) => {
+                    const isSelected = selectedCategories.includes(cat);
                     return (
                       <button
-                        key={cycle}
+                        key={cat}
                         type="button"
-                        onClick={() => setAvgSaleCycle(cycle)}
-                        className={`py-1.5 text-[11px] font-bold rounded-md transition-all cursor-pointer select-none ${
+                        onClick={() => toggleCategory(cat)}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
                           isSelected 
-                            ? 'bg-white text-neutral-900 shadow-sm'
-                            : 'text-neutral-500 hover:text-neutral-800'
+                            ? 'bg-neutral-900 text-white border-neutral-900 shadow-2xs'
+                            : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50 hover:text-neutral-900'
                         }`}
                       >
-                        {cycle}
+                        {cat}
                       </button>
                     );
                   })}
                 </div>
               </div>
-            </div>
 
-            {/* Geography Searchable multi-select */}
-            <div className="relative pt-2">
-              <label className="inline-flex items-center text-xs font-bold text-neutral-700 uppercase tracking-wide mb-1.5">
-                <span>Geography Metros</span>
-                <InfoTooltip content="Filter matched leads that show primary residential or transactional footprints in these major metropolitan hubs." />
-              </label>
-              
-              {/* Selected cities tags block */}
-              {selectedGeographies.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2.5">
-                  {selectedGeographies.map(city => (
-                    <span key={city} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 text-xs font-bold bg-neutral-100 text-neutral-700 rounded-md border border-neutral-200/50">
-                      {city}
-                      <button 
-                        type="button" 
-                        onClick={() => removeGeography(city)}
-                        className="p-0.5 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200 rounded transition-colors"
-                      >
-                        <X size={11} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Search Box */}
-              <div className="relative">
-                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-                <input 
-                  type="text"
-                  placeholder="Search and add metro cities..."
-                  value={geoSearchQuery}
-                  onFocus={() => setGeoDropdownOpen(true)}
-                  onChange={(e) => {
-                    setGeoSearchQuery(e.target.value);
-                    setGeoDropdownOpen(true);
-                  }}
-                  className="w-full pl-9 pr-4 py-2 text-xs bg-neutral-50/50 focus:bg-white border border-neutral-200 rounded-lg text-neutral-800 placeholder-neutral-400 font-medium focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 transition-all"
-                />
-              </div>
-
-              {/* Search dropdown results */}
-              {geoDropdownOpen && (
-                <div className="absolute left-0 right-0 mt-1 bg-white border border-neutral-200 rounded-xl shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                  {filteredGeographies.length > 0 ? (
-                    filteredGeographies.map(city => (
+              {/* Confidence (Segmented control, defaults to High) */}
+              <div>
+                <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-2">
+                  <span>Confidence Level</span>
+                  <InfoTooltip content="Match score strictness threshold. Defaults to High for maximum qualified prospect intent." />
+                </label>
+                <div className="grid grid-cols-3 gap-1.5 bg-neutral-100 p-1 rounded-xl max-w-md">
+                  {(['High', 'Medium', 'Both'] as const).map((tier) => {
+                    const isSelected = confidence === tier;
+                    return (
                       <button
-                        key={city}
+                        key={tier}
                         type="button"
-                        onClick={() => addGeography(city)}
-                        className="w-full text-left px-3.5 py-2 text-xs font-medium text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 transition-colors"
+                        onClick={() => setConfidence(tier)}
+                        className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          isSelected 
+                            ? 'bg-white text-neutral-900 shadow-xs'
+                            : 'text-neutral-500 hover:text-neutral-800'
+                        }`}
                       >
-                        {city}
+                        {tier}
                       </button>
-                    ))
-                  ) : (
-                    <div className="px-3.5 py-2 text-xs text-neutral-400">
-                      No matching metro cities found
-                    </div>
-                  )}
-                  {selectedGeographies.length > 0 && (
-                    <div className="border-t border-neutral-100 mt-1.5 pt-1">
-                      <button 
-                        type="button"
-                        onClick={() => setGeoDropdownOpen(false)}
-                        className="w-full text-center py-1 text-[10px] font-bold text-neutral-400 hover:text-neutral-600 uppercase tracking-wider"
-                      >
-                        Close selector
-                      </button>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
-              )}
-            </div>
-
-            {/* Exclusions Block */}
-            <div className="border-t border-neutral-100 pt-5 space-y-4">
-              {/* Toggle 1: Exclude Delivered */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="inline-flex items-center text-xs font-bold text-neutral-800">
-                    <span>Exclude previously delivered leads</span>
-                    <InfoTooltip content="Ensure 100% unique lead acquisitions by suppressing records already matched in your other active campaigns." />
-                  </h4>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setExcludeDelivered(!excludeDelivered)}
-                  className={`relative w-8 h-4.5 rounded-full transition-colors cursor-pointer focus:outline-none ${
-                    excludeDelivered ? 'bg-neutral-900' : 'bg-neutral-200'
-                  }`}
-                >
-                  <div className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                    excludeDelivered ? 'translate-x-3.5' : 'translate-x-0'
-                  }`} />
-                </button>
               </div>
 
-              {/* Toggle 2: Exclude Existing */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="inline-flex items-center text-xs font-bold text-neutral-800">
-                    <span>Exclude existing customers</span>
-                    <InfoTooltip content="Avoid marketing budget wastage or target collisions with established accounts already onboarded in Zenith Bank's systems." />
-                  </h4>
+              {/* Toggles: Exclude Delivered & Exclude Existing */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                <div className="flex items-center justify-between p-3.5 bg-neutral-50/70 border border-neutral-200/70 rounded-xl">
+                  <div className="pr-3">
+                    <span className="text-xs font-bold text-neutral-800 block">
+                      Exclude previously-delivered leads
+                    </span>
+                    <span className="text-[10.5px] text-neutral-500">
+                      Suppress duplicate records across campaigns.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setExcludeDelivered(!excludeDelivered)}
+                    className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer shrink-0 focus:outline-none ${
+                      excludeDelivered ? 'bg-neutral-900' : 'bg-neutral-300'
+                    }`}
+                  >
+                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-xs transition-transform duration-200 ${
+                      excludeDelivered ? 'translate-x-4' : 'translate-x-0'
+                    }`} />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setExcludeExisting(!excludeExisting)}
-                  className={`relative w-8 h-4.5 rounded-full transition-colors cursor-pointer focus:outline-none ${
-                    excludeExisting ? 'bg-neutral-900' : 'bg-neutral-200'
-                  }`}
-                >
-                  <div className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                    excludeExisting ? 'translate-x-3.5' : 'translate-x-0'
-                  }`} />
-                </button>
+
+                <div className="flex items-center justify-between p-3.5 bg-neutral-50/70 border border-neutral-200/70 rounded-xl">
+                  <div className="pr-3">
+                    <span className="text-xs font-bold text-neutral-800 block">
+                      Exclude existing customers
+                    </span>
+                    <span className="text-[10.5px] text-neutral-500">
+                      Avoid marketing collision with active client accounts.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setExcludeExisting(!excludeExisting)}
+                    className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer shrink-0 focus:outline-none ${
+                      excludeExisting ? 'bg-neutral-900' : 'bg-neutral-300'
+                    }`}
+                  >
+                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-xs transition-transform duration-200 ${
+                      excludeExisting ? 'translate-x-4' : 'translate-x-0'
+                    }`} />
+                  </button>
+                </div>
               </div>
-            </div>
 
-          </div>
-
-          {/* Section C: Budget & Duration */}
-          <div className="bg-white border border-neutral-200/60 rounded-xl p-6 shadow-sm space-y-5">
-            <h3 className="text-xs font-bold text-neutral-800 uppercase tracking-wide border-b border-neutral-100 pb-2">
-              Financials & Timeline
-            </h3>
-
-            {/* Budget Templates */}
-            <div>
-              <label className="inline-flex items-center text-xs font-bold text-neutral-700 uppercase tracking-wide mb-2.5">
-                <span>Budget Templates</span>
-                <InfoTooltip content="Quick shortcut templates that instantly apply a standard daily budget and default duration to a 30-day window." />
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {[5000, 10000, 25000].map((amt) => {
-                  const isSelected = budgetPerDay === amt;
-                  return (
-                    <button
-                      key={amt}
-                      type="button"
-                      onClick={() => applyBudgetTemplate(amt)}
-                      className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer select-none active:scale-95 ${
-                        isSelected
-                          ? 'bg-[#10b981] text-white border-transparent shadow-sm'
-                          : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50 hover:text-neutral-900'
-                      }`}
-                    >
-                      ₹{amt.toLocaleString('en-IN')} / day
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Row 1: Daily budget and Total Budget Cap */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Total budget cap */}
               <div>
-                <label className="inline-flex items-center text-xs font-bold text-neutral-700 uppercase tracking-wide mb-1.5">
-                  <span>Budget per day (₹)</span> <span className="text-red-500 ml-1">*</span>
-                  <InfoTooltip content="Pacing budget dedicated daily to lead matches. Higher daily pacing matches larger audience sizes." />
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-xs">₹</span>
-                  <input 
-                    type="number" 
-                    value={budgetPerDay}
-                    onChange={(e) => {
-                      const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                      setBudgetPerDay(val);
-                    }}
-                    placeholder="Enter daily amount"
-                    className="w-full pl-7 pr-3.5 py-2 text-xs bg-neutral-50/50 focus:bg-white border border-neutral-200 rounded-lg text-neutral-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 transition-all"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="inline-flex items-center text-xs font-bold text-neutral-700 uppercase tracking-wide mb-1.5">
+                <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
                   <span>Total budget cap (₹)</span> <span className="text-neutral-400 font-normal ml-1">(Optional)</span>
-                  <InfoTooltip content="Set a maximum absolute marketing stop threshold that hard-halts lead delivery regardless of date duration limits." />
+                  <InfoTooltip content="An absolute monetary limit that automatically pauses the campaign once reached." />
                 </label>
-                <div className="relative">
+                <div className="relative max-w-sm">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-xs">₹</span>
                   <input 
                     type="number" 
@@ -810,187 +988,69 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onCancel, onSa
                       setTotalBudgetCap(val);
                     }}
                     placeholder="None (run dynamically)"
-                    className="w-full pl-7 pr-3.5 py-2 text-xs bg-neutral-50/50 focus:bg-white border border-neutral-200 rounded-lg text-neutral-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 transition-all"
+                    className="w-full pl-7 pr-3.5 py-2 text-xs bg-neutral-50/70 focus:bg-white border border-neutral-200 rounded-xl text-neutral-900 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
                   />
                 </div>
+                {totalBudgetCap !== '' && totalBudgetCap < budgetPerDay && (
+                  <p className="text-[11px] text-red-500 font-bold mt-1 flex items-center gap-1">
+                    <AlertTriangle size={12} /> Total budget cap must be at least the daily budget (₹{budgetPerDay.toLocaleString('en-IN')}).
+                  </p>
+                )}
               </div>
-            </div>
 
-            {/* Row 2: Date range selection */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Internal notes / objective */}
               <div>
-                <label className="inline-flex items-center text-xs font-bold text-neutral-700 uppercase tracking-wide mb-1.5">
-                  <span>Start Date</span>
-                  <InfoTooltip content="The scheduled calendar date to start campaign pacing and lead delivery." />
+                <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
+                  <span>Internal notes / objective</span>
+                  <InfoTooltip content="Record campaign goals, qualifier notes, or team instructions for internal reporting." />
                 </label>
-                <div className="relative">
-                  <Calendar size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
-                  <input 
-                    type="date" 
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full pl-9 pr-3.5 py-2 text-xs bg-neutral-50/50 focus:bg-white border border-neutral-200 rounded-lg text-neutral-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 transition-all"
-                  />
-                </div>
+                <textarea 
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Record internal campaign objectives, targeting rationale, or special qualifiers..."
+                  className="w-full px-3.5 py-2 text-xs bg-neutral-50/70 focus:bg-white border border-neutral-200 rounded-xl text-neutral-900 font-medium placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                />
               </div>
 
-              <div>
-                <label className="inline-flex items-center text-xs font-bold text-neutral-700 uppercase tracking-wide mb-1.5">
-                  <span>End Date</span>
-                  <InfoTooltip content="The calendar date to conclude campaign lead acquisitions." />
-                </label>
-                <div className="relative">
-                  <Calendar size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
-                  <input 
-                    type="date" 
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    min={startDate}
-                    className="w-full pl-9 pr-3.5 py-2 text-xs bg-neutral-50/50 focus:bg-white border border-neutral-200 rounded-lg text-neutral-800 font-semibold focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 transition-all"
-                  />
-                </div>
-              </div>
             </div>
-
-            <p className="text-[10px] text-neutral-400 pt-1">
-              Campaign will run for <strong className="text-neutral-700 font-bold">{durationInDays} days</strong> based on dates selected.
-            </p>
-          </div>
-
-          {/* Section D: Notes */}
-          <div className="bg-white border border-neutral-200/60 rounded-xl p-6 shadow-sm">
-            <label className="inline-flex items-center text-xs font-bold text-neutral-700 uppercase tracking-wide mb-1.5">
-              <span>Internal notes / objective</span>
-              <InfoTooltip content="Document internal milestones, customized qualifiers, or special targeting instructions." />
-            </label>
-            <textarea 
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Record campaign goals or target instructions here for reporting references."
-              className="w-full px-3.5 py-2 text-xs bg-neutral-50/50 focus:bg-white border border-neutral-200 rounded-lg text-neutral-800 font-medium placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 transition-all"
-            />
-          </div>
-
+          )}
         </div>
 
-        {/* Right Column: Dynamic forecast panel (Sticky) */}
-        <div className="lg:col-span-5 lg:sticky lg:top-6 space-y-6">
-          
-          {/* Live Forecast Box */}
-          <div className="bg-white border border-neutral-200/60 rounded-xl p-6 shadow-sm space-y-5">
-            <div>
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#3b82f6] uppercase tracking-wider mb-1">
-                <Sparkles size={13} />
-                <span>Live targeting estimate</span>
-              </div>
-              <h3 className="text-sm font-bold text-neutral-900">Core Forecast Summary</h3>
-            </div>
+        {/* 10. Actions Footer: Save as draft / Launch */}
+        <div className="pt-4 border-t border-neutral-200/80 flex flex-col sm:flex-row items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold text-neutral-600 hover:text-neutral-900 bg-transparent hover:bg-neutral-100 rounded-xl transition-all cursor-pointer text-center"
+          >
+            Cancel
+          </button>
 
-            {/* Zero match warning check */}
-            {forecast.isZeroMatch ? (
-              <div className="bg-amber-50 border border-amber-200/65 rounded-xl p-4 text-amber-900 space-y-1.5 animate-pulse">
-                <div className="flex items-center gap-2 text-xs font-bold text-amber-800">
-                  <AlertTriangle size={15} />
-                  <span>Zero-match targeting alert</span>
-                </div>
-                <p className="text-[11px] leading-relaxed text-amber-700 font-medium">
-                  {forecast.zeroMatchReason} Please adjust targeting criteria or increase budget per day to generate active lead matches.
-                </p>
-              </div>
-            ) : null}
+          <button
+            type="button"
+            onClick={() => handleSubmit('Draft')}
+            className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 rounded-xl shadow-2xs transition-all focus:outline-none active:scale-98 cursor-pointer"
+          >
+            Save as draft
+          </button>
 
-            {/* Forecaster Stats Display */}
-            <div className="space-y-3 pt-1">
-              {/* Stat 1 */}
-              <div className="bg-neutral-50/60 border border-neutral-200/30 rounded-xl p-4 flex justify-between items-center">
-                <div className="min-w-0">
-                  <span className="text-[10px] text-neutral-400 block font-bold uppercase tracking-wider">
-                    Est. leads / day
-                  </span>
-                  <span className="text-2xl font-extrabold text-neutral-800 block mt-1 tracking-tight">
-                    {forecast.leadsPerDay}
-                  </span>
-                </div>
-                <div className="w-10 h-10 rounded-lg bg-[#3b82f6]/10 flex items-center justify-center text-[#3b82f6]">
-                  <Check size={18} className="stroke-[2.5]" />
-                </div>
-              </div>
-
-              {/* Stat 2 */}
-              <div className="bg-neutral-50/60 border border-neutral-200/30 rounded-xl p-4 flex justify-between items-center">
-                <div className="min-w-0">
-                  <span className="text-[10px] text-neutral-400 block font-bold uppercase tracking-wider">
-                    Est. total leads
-                  </span>
-                  <span className="text-2xl font-extrabold text-neutral-800 block mt-1 tracking-tight">
-                    {forecast.totalLeads.toLocaleString('en-IN')}
-                  </span>
-                </div>
-                <div className="w-10 h-10 rounded-lg bg-[#1e3a8a]/10 flex items-center justify-center text-[#1e3a8a]">
-                  <Info size={18} className="stroke-[2.5]" />
-                </div>
-              </div>
-
-              {/* Stat 3 */}
-              <div className="bg-neutral-50/60 border border-neutral-200/30 rounded-xl p-4 flex justify-between items-center">
-                <div className="min-w-0">
-                  <span className="text-[10px] text-neutral-400 block font-bold uppercase tracking-wider">
-                    Est. total spend
-                  </span>
-                  <span className="text-2xl font-extrabold text-neutral-800 block mt-1 tracking-tight">
-                    ₹{forecast.totalSpend.toLocaleString('en-IN')}
-                  </span>
-                </div>
-                <div className="w-10 h-10 rounded-lg bg-[#10b981]/10 flex items-center justify-center text-[#10b981]">
-                  <span className="font-bold text-sm">₹</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Note info tag */}
-            <div className="bg-blue-50/40 border border-blue-200/30 rounded-lg p-3 text-neutral-600 text-[10.5px] leading-relaxed">
-              These estimates are computed in real-time utilizing historical engagement profiles matching Zenith's HNI target personas. Actual leads might vary slightly based on seasonal market spikes.
-            </div>
-
-            {/* CTA control actions */}
-            <div className="pt-2 flex flex-col gap-2.5">
-              <button
-                type="button"
-                disabled={forecast.isZeroMatch}
-                onClick={() => handleAction('Active')}
-                className={`w-full py-2.5 text-xs font-bold text-white rounded-lg shadow-sm transition-all focus:outline-none flex items-center justify-center gap-2 ${
-                  forecast.isZeroMatch
-                    ? 'bg-neutral-300 cursor-not-allowed text-neutral-500'
-                    : 'bg-[#2563eb] hover:bg-[#1d4ed8] active:scale-95 cursor-pointer'
-                }`}
-              >
-                <span>Launch campaign</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleAction('Draft')}
-                className="w-full py-2.5 text-xs font-bold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 rounded-lg shadow-sm transition-all focus:outline-none active:scale-95 cursor-pointer"
-              >
-                Save as draft
-              </button>
-
-              <button
-                type="button"
-                onClick={onCancel}
-                className="w-full py-2 text-xs font-semibold text-neutral-400 hover:text-neutral-600 transition-colors text-center cursor-pointer"
-              >
-                Cancel & return
-              </button>
-            </div>
-
-          </div>
-
+          <button
+            type="button"
+            disabled={!isFormValid}
+            onClick={() => handleSubmit('Active')}
+            className={`w-full sm:w-auto px-7 py-2.5 text-xs font-bold text-white rounded-xl shadow-sm transition-all focus:outline-none flex items-center justify-center gap-2 ${
+              !isFormValid
+                ? 'bg-neutral-300 cursor-not-allowed text-neutral-500'
+                : 'bg-blue-600 hover:bg-blue-700 active:scale-98 cursor-pointer shadow-blue-500/20 shadow-md'
+            }`}
+          >
+            <span>Launch campaign</span>
+            <ArrowRight size={13} className="stroke-[2.5]" />
+          </button>
         </div>
 
       </div>
-
     </div>
   );
 };

@@ -37,6 +37,7 @@ import { CustomerInsightDashboard } from './CustomerInsightDashboard';
 import { CustomerInsightBuilder } from './CustomerInsightBuilder';
 import { CustomerInsightManagement } from './CustomerInsightManagement';
 import { CustomerInsightFeed } from './CustomerInsightFeed';
+import { LeadQualCampaignBuilder } from './LeadQualCampaignBuilder';
 
 export interface QualFile {
   id: string;
@@ -72,6 +73,9 @@ export interface QualCampaign {
   };
   // RACE fit & campaign attributes
   industry: string;
+  businessLine?: string;
+  targetCQC?: number;
+  notes?: string;
   capitalProfile?: string;
   targetRegion?: string;
   customerSegment?: string;
@@ -561,9 +565,13 @@ const generateMockRecords = (campaignId: string, count: number): QualRecord[] =>
 
 interface LeadQualificationProps {
   initialView?: 'dashboard' | 'builder' | 'results' | 'list' | 'management' | 'insight-dashboard' | 'insight-builder' | 'insight-management' | 'insight-feed';
+  onSwitchToV2?: () => void;
 }
 
-export const LeadQualification: React.FC<LeadQualificationProps> = ({ initialView = 'dashboard' }) => {
+export const LeadQualification: React.FC<LeadQualificationProps> = ({ 
+  initialView = 'dashboard',
+  onSwitchToV2
+}) => {
   // App navigation state: 'dashboard' | 'builder' | 'results' | 'list' | 'management' | 'insight-dashboard' | 'insight-builder' | 'insight-management' | 'insight-feed'
   const [qualView, setQualView] = useState<'dashboard' | 'builder' | 'results' | 'list' | 'management' | 'insight-dashboard' | 'insight-builder' | 'insight-management' | 'insight-feed'>(initialView);
   
@@ -1000,18 +1008,8 @@ export const LeadQualification: React.FC<LeadQualificationProps> = ({ initialVie
 
   // Helper to open builder for a new campaign
   const handleNewCampaignClick = () => {
+    setClonedCampaignForBuilder(null);
     setSelectedCampaignId(null);
-    setCampaignName('');
-    setTargetProduct('Wealth Advisory');
-    setIndustry('Technology');
-    setCapitalProfile('₹50 - 500 Cr');
-    setTargetRegion('North Region');
-    setCustomerSegment('Individual High Net Worth');
-    setIncomeWeight(50);
-    setSpendWeight(30);
-    setPropensityWeight(20);
-    setPendingFile(null);
-    setConsentConfirmed(false);
     setQualView('builder');
   };
 
@@ -1175,48 +1173,105 @@ export const LeadQualification: React.FC<LeadQualificationProps> = ({ initialVie
     }, 1100);
   };
 
+  // Run Lead Qualification campaign
+  const handleRunLeadQualCampaign = (campaignData: Partial<QualCampaign> & { fileToRun: Omit<QualFile, 'id'> }) => {
+    const { fileToRun, ...rest } = campaignData;
+    const targetId = selectedCampaignId;
+    const newFileId = `FL-${targetId ? targetId.replace('QUAL-', '') : Math.floor(Math.random() * 900 + 106)}-${Date.now().toString().slice(-3)}`;
+    
+    const completedFile: QualFile = {
+      ...fileToRun,
+      id: newFileId,
+      status: 'Processing'
+    };
+
+    if (targetId) {
+      setCampaigns(prev => prev.map(c => {
+        if (c.id === targetId) {
+          const updatedFiles = [...(c.files || []), completedFile];
+          return {
+            ...c,
+            filesCount: updatedFiles.length,
+            peopleScored: c.peopleScored + completedFile.rowsAccepted,
+            totalSpend: c.totalSpend + completedFile.cost,
+            hasRunFirstFile: true,
+            files: updatedFiles,
+            status: 'Processing',
+            activityLog: [
+              ...(c.activityLog || []),
+              `File '${completedFile.fileName}' added for qualification processing (${completedFile.rowsAccepted.toLocaleString()} accepted rows, cost: ₹${completedFile.cost.toLocaleString('en-IN')})`
+            ]
+          };
+        }
+        return c;
+      }));
+      setToast(`File uploaded! Processing qualification for campaign.`);
+    } else {
+      const newId = `QUAL-${Math.floor(Math.random() * 900 + 106)}`;
+      const newCamp: QualCampaign = {
+        id: newId,
+        name: rest.name || "Untitled Qualification Campaign",
+        filesCount: 1,
+        peopleScored: completedFile.rowsAccepted,
+        uploadedBy: "Sidhartha R.",
+        status: "Processing",
+        dateCreated: new Date().toISOString().slice(0, 10),
+        totalSpend: completedFile.cost,
+        targetProduct: rest.businessLine || rest.targetProduct || "New Sale",
+        businessLine: rest.businessLine || rest.targetProduct || "New Sale",
+        targetCQC: rest.targetCQC || 18,
+        targetCostPerQualifiedLead: rest.targetCQC || 18,
+        notes: rest.notes || "",
+        industry: rest.industry || "Automobile",
+        hasRunFirstFile: true,
+        weights: { incomeWeight: 50, spendWeight: 30, propensityWeight: 20 },
+        confidenceStats: { 
+          high: Math.round(completedFile.rowsAccepted * 0.55), 
+          medium: Math.round(completedFile.rowsAccepted * 0.30), 
+          low: Math.round(completedFile.rowsAccepted * 0.15) 
+        },
+        files: [completedFile],
+        activityLog: [
+          `Campaign created by Sidhartha R. on ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`,
+          `RACE Qualification target locked at ₹${rest.targetCQC || 18} CQC | Business line: ${rest.businessLine || 'New Sale'}`,
+          `Initial roster file '${completedFile.fileName}' added (${completedFile.rowsAccepted.toLocaleString()} accepted rows)`
+        ]
+      };
+      setCampaigns(prev => [newCamp, ...prev]);
+      setToast(`Campaign '${newCamp.name}' created! File is processing.`);
+    }
+
+    setClonedCampaignForBuilder(null);
+    setSelectedCampaignId(null);
+    setQualView('dashboard');
+  };
+
   // Clone Campaign logic
   const handleCloneCampaign = (camp: QualCampaign) => {
+    const cloned = {
+      ...camp,
+      id: `QUAL-${Math.floor(Math.random() * 900 + 106)}`,
+      name: `${camp.name} (Clone)`,
+      filesCount: 0,
+      peopleScored: 0,
+      totalSpend: 0,
+      hasRunFirstFile: false,
+      files: [],
+      activityLog: [
+        `Campaign cloned from ${camp.id} (${camp.name}) on ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`,
+        `RACE Qualification settings unlocked for customization.`
+      ]
+    };
     setSelectedCampaignId(null);
-    setCampaignName(`Copy of ${camp.name}`);
-    setTargetProduct(camp.targetProduct);
-    setIndustry(camp.industry);
-    setCapitalProfile(camp.capitalProfile);
-    setTargetRegion(camp.targetRegion);
-    setCustomerSegment(camp.customerSegment);
-    setTicketSizeMin(camp.ticketSizeMin ?? 10000);
-    setTicketSizeMax(camp.ticketSizeMax ?? 500000);
-    setPurchaseCycle(camp.purchaseCycle ?? 'One-time');
-    setPurchaseChannel(camp.purchaseChannel ?? 'Both');
-    setTargetCostPerQualifiedLead(camp.targetCostPerQualifiedLead ?? 15);
-    setIncomeWeight(camp.weights.incomeWeight);
-    setSpendWeight(camp.weights.spendWeight);
-    setPropensityWeight(camp.weights.propensityWeight);
-    setPendingFile(null);
-    setConsentConfirmed(false);
+    setClonedCampaignForBuilder(cloned as any);
     setQualView('builder');
-    setToast(`Cloned configuration from ${camp.name}! Feel free to adjust attributes.`);
+    setToast(`Cloned configuration from ${camp.name}! Ready to customize.`);
   };
 
   // Edit / view campaign details
   const handleViewCampaignDetails = (camp: QualCampaign) => {
+    setClonedCampaignForBuilder(null);
     setSelectedCampaignId(camp.id);
-    setCampaignName(camp.name);
-    setTargetProduct(camp.targetProduct);
-    setIndustry(camp.industry);
-    setCapitalProfile(camp.capitalProfile);
-    setTargetRegion(camp.targetRegion);
-    setCustomerSegment(camp.customerSegment);
-    setTicketSizeMin(camp.ticketSizeMin ?? 10000);
-    setTicketSizeMax(camp.ticketSizeMax ?? 500000);
-    setPurchaseCycle(camp.purchaseCycle ?? 'One-time');
-    setPurchaseChannel(camp.purchaseChannel ?? 'Both');
-    setTargetCostPerQualifiedLead(camp.targetCostPerQualifiedLead ?? 15);
-    setIncomeWeight(camp.weights.incomeWeight);
-    setSpendWeight(camp.weights.spendWeight);
-    setPropensityWeight(camp.weights.propensityWeight);
-    setPendingFile(null);
-    setConsentConfirmed(false);
     setQualView('builder');
   };
 
@@ -1329,7 +1384,10 @@ export const LeadQualification: React.FC<LeadQualificationProps> = ({ initialVie
           status: 'Completed',
           dateCreated: new Date().toISOString().slice(0, 10),
           totalSpend: completedFile.cost,
-          targetProduct: "Wealth Advisory",
+          targetProduct: rest.businessLine || rest.targetProduct || "New Sale",
+          businessLine: rest.businessLine || rest.targetProduct || "New Sale",
+          targetCQC: rest.targetCQC || 18,
+          notes: rest.notes || "",
           weights: { incomeWeight: 50, spendWeight: 30, propensityWeight: 20 },
           confidenceStats: {
             high: Math.round(completedFile.rowsAccepted * 0.58),
@@ -1405,6 +1463,7 @@ export const LeadQualification: React.FC<LeadQualificationProps> = ({ initialVie
       {qualView === 'insight-dashboard' && (
         <CustomerInsightDashboard 
           campaigns={campaigns} 
+          onSwitchToV2={onSwitchToV2}
           onNavigate={(targetView, campaignId) => {
             if (campaignId) {
               setSelectedCampaignId(campaignId);
@@ -1495,6 +1554,19 @@ export const LeadQualification: React.FC<LeadQualificationProps> = ({ initialVie
                   <option value="Last 90 days">Last 90 days</option>
                 </select>
               </div>
+
+              {/* Switch to Dashboard v2 CTA */}
+              {onSwitchToV2 && (
+                <button
+                  onClick={onSwitchToV2}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg shadow-2xs transition-all cursor-pointer"
+                  title="Switch to Lead Qualification Dashboard V2"
+                  id="qual_switch_to_v2_btn"
+                >
+                  <span>Dashboard v2</span>
+                  <span className="text-[9px] px-1 py-0.2 bg-blue-600 text-white rounded font-extrabold">NEW</span>
+                </button>
+              )}
 
               {/* Launch New Campaign CTA */}
               <button
@@ -2175,442 +2247,21 @@ export const LeadQualification: React.FC<LeadQualificationProps> = ({ initialVie
         </>
       )}
 
-      {/* VIEW 2: CAMPAIGN BUILDER & ACTIVE MANAGEMENT PANEL */}
+      {/* VIEW 2: LEAD QUALIFICATION CAMPAIGN BUILDER */}
       {qualView === 'builder' && (
-        <div className="space-y-6">
-          {/* Header navigation section */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-4 border-b border-neutral-200/50">
-            <div className="flex items-center gap-2.5">
-              <button 
-                type="button"
-                onClick={() => setQualView('dashboard')}
-                className="p-1.5 hover:bg-neutral-100 rounded-lg text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <div>
-                <h2 className="text-xl font-bold text-neutral-900 tracking-tight flex items-center gap-2">
-                  <span>{selectedCampaignId ? `Manage Campaign: ${campaignName}` : "Create Lead Qualification Campaign"}</span>
-                  {selectedCampaignId && (
-                    <span className="bg-neutral-100 text-neutral-700 border border-neutral-200 font-mono text-[9px] px-2.5 py-0.5 rounded-full uppercase font-bold">
-                      ID: {selectedCampaignId}
-                    </span>
-                  )}
-                </h2>
-                <p className="text-xs text-neutral-400 mt-0.5 font-medium">
-                  Define business parameters to set fit context, map attributes, upload client rosters, and approve execution.
-                </p>
-              </div>
-            </div>
-
-            {/* Campaign Cloner at top if campaign already has runs and is locked */}
-            {selectedCampaignId && campaigns.find(c => c.id === selectedCampaignId)?.hasRunFirstFile && (
-              <button
-                type="button"
-                onClick={() => {
-                  const activeC = campaigns.find(c => c.id === selectedCampaignId);
-                  if (activeC) handleCloneCampaign(activeC);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-100 text-blue-700 hover:bg-blue-100 active:scale-95 text-xs font-bold rounded-lg transition-all shadow-xs cursor-pointer"
-              >
-                <Copy size={12.5} />
-                <span>Clone Campaign to Change Attributes</span>
-              </button>
-            )}
-          </div>
-
-          {isProcessingFile ? (
-            /* Scoring execution progress log block */
-            <div className="bg-white border border-neutral-200/60 rounded-xl p-8 shadow-sm space-y-6 max-w-2xl mx-auto text-center py-16">
-              <div className="relative w-24 h-24 mx-auto flex items-center justify-center bg-[#eff6ff] rounded-full border border-blue-100">
-                <RefreshCw className="text-blue-600 animate-spin" size={32} />
-                <span className="absolute text-xs font-black text-blue-800">{processingProgress}%</span>
-              </div>
-
-              <div className="space-y-1.5">
-                <h3 className="text-sm font-bold text-neutral-800 tracking-tight">AI Scoring Engine Evaluating Roster...</h3>
-                <p className="text-xs text-neutral-400 font-semibold max-w-md mx-auto">
-                  Applying propensity criteria models to your roster. Validating exclusion criteria in the background.
-                </p>
-              </div>
-
-              {/* Progress bar */}
-              <div className="w-full max-w-md h-2 bg-neutral-150 rounded-full mx-auto overflow-hidden">
-                <div 
-                  className="bg-blue-600 h-full rounded-full transition-all duration-300"
-                  style={{ width: `${processingProgress}%` }}
-                />
-              </div>
-
-              {/* Console live log terminal */}
-              <div className="bg-neutral-950 text-emerald-400 font-mono text-[10.5px] text-left p-4.5 rounded-lg max-w-xl mx-auto h-48 overflow-y-auto space-y-2 select-text shadow-inner border border-neutral-800">
-                {processingLogs.map((log, i) => (
-                  <div key={i} className="leading-relaxed font-semibold break-all opacity-95">
-                    {log}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            /* Main Form layout split: Attributes vs. File execution & history */
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
-              {/* Col 1: Campaign Configuration Attributes */}
-              <div className="space-y-6 lg:col-span-1">
-                <div className="bg-white border border-neutral-200/60 rounded-xl p-5 shadow-sm space-y-5">
-                  <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-                    <h3 className="text-xs uppercase font-extrabold text-neutral-400 tracking-wider flex items-center gap-1.5">
-                      <Briefcase size={13.5} />
-                      <span>RACE Fit Configuration</span>
-                    </h3>
-                    {selectedCampaignId && campaigns.find(c => c.id === selectedCampaignId)?.hasRunFirstFile ? (
-                      <span className="bg-amber-50 text-amber-800 border border-amber-100 font-extrabold text-[8.5px] px-2 py-0.5 rounded uppercase flex items-center gap-1">
-                        <Clock size={10} />
-                        <span>Locked (First file run)</span>
-                      </span>
-                    ) : (
-                      <span className="bg-emerald-50 text-emerald-800 border border-emerald-100 font-extrabold text-[8.5px] px-2 py-0.5 rounded uppercase flex items-center gap-1">
-                        <Check size={10} />
-                        <span>Editable</span>
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Attribute input fields */}
-                  <div className="space-y-4">
-                    
-                    {/* Campaign Name */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-neutral-700 block">Campaign Name <strong className="text-red-500">*</strong></label>
-                      <input 
-                        type="text"
-                        required
-                        disabled={!!selectedCampaignId && !!campaigns.find(c => c.id === selectedCampaignId)?.hasRunFirstFile}
-                        placeholder="e.g. West Coast Asset Allocation Cohort"
-                        value={campaignName}
-                        onChange={(e) => setCampaignName(e.target.value)}
-                        className="w-full bg-neutral-50 border border-neutral-200 focus:bg-white focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600 rounded-lg px-3 py-2 text-xs font-semibold focus:outline-none transition-all disabled:opacity-65 disabled:bg-neutral-100 disabled:cursor-not-allowed"
-                      />
-                    </div>
-
-                    {/* Target Product */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-neutral-700 block">Target Product Offering</label>
-                      <select
-                        disabled={!!selectedCampaignId && !!campaigns.find(c => c.id === selectedCampaignId)?.hasRunFirstFile}
-                        value={targetProduct}
-                        onChange={(e) => setTargetProduct(e.target.value)}
-                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs font-semibold focus:outline-none cursor-pointer disabled:opacity-65 disabled:bg-neutral-100 disabled:cursor-not-allowed"
-                      >
-                        <option value="Wealth Advisory">Wealth Advisory</option>
-                        <option value="Mutual Funds">Mutual Funds</option>
-                        <option value="Credit Cards">Premium Cards</option>
-                        <option value="Insurance">High Value Insurance</option>
-                        <option value="Legacy Trust">Legacy Trust Planning</option>
-                      </select>
-                    </div>
-
-                    {/* Industry */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-neutral-700 block">Industry Fit Context</label>
-                      <select
-                        disabled={!!selectedCampaignId && !!campaigns.find(c => c.id === selectedCampaignId)?.hasRunFirstFile}
-                        value={industry}
-                        onChange={(e) => setIndustry(e.target.value)}
-                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs font-semibold focus:outline-none cursor-pointer disabled:opacity-65 disabled:bg-neutral-100 disabled:cursor-not-allowed"
-                      >
-                        <option value="Technology">Technology & Software</option>
-                        <option value="Financial Services">Financial Services & Banking</option>
-                        <option value="Healthcare">Healthcare & Bio-Pharma</option>
-                        <option value="E-commerce & Retail">E-commerce & Consumer Retail</option>
-                        <option value="Real Estate">Real Estate & Developers</option>
-                        <option value="Manufacturing">Heavy Manufacturing</option>
-                      </select>
-                      <p className="text-[9.5px] text-neutral-400 font-medium">Determines sector multiplier index values in the RACE judge engine.</p>
-                    </div>
-
-                    {/* Ticket size of the product */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-neutral-700 block">Product Ticket Size (₹) <strong className="text-red-500">*</strong></label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-0.5">
-                          <span className="text-[9px] font-bold text-neutral-400 block uppercase">Min (₹)</span>
-                          <input 
-                            type="number"
-                            min="0"
-                            step="5000"
-                            disabled={!!selectedCampaignId && !!campaigns.find(c => c.id === selectedCampaignId)?.hasRunFirstFile}
-                            value={ticketSizeMin}
-                            onChange={(e) => setTicketSizeMin(Math.max(0, Number(e.target.value)))}
-                            className="w-full bg-neutral-50 border border-neutral-200 focus:bg-white focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600 rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none transition-all disabled:opacity-65 disabled:bg-neutral-100 disabled:cursor-not-allowed"
-                          />
-                        </div>
-                        <div className="space-y-0.5">
-                          <span className="text-[9px] font-bold text-neutral-400 block uppercase">Max (₹)</span>
-                          <input 
-                            type="number"
-                            min="0"
-                            step="5000"
-                            disabled={!!selectedCampaignId && !!campaigns.find(c => c.id === selectedCampaignId)?.hasRunFirstFile}
-                            value={ticketSizeMax}
-                            onChange={(e) => setTicketSizeMax(Math.max(0, Number(e.target.value)))}
-                            className="w-full bg-neutral-50 border border-neutral-200 focus:bg-white focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600 rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none transition-all disabled:opacity-65 disabled:bg-neutral-100 disabled:cursor-not-allowed"
-                          />
-                        </div>
-                      </div>
-                      <p className="text-[9.5px] text-neutral-400 font-medium leading-tight">
-                        Range: {ticketSizeMin >= 100000 ? `₹${(ticketSizeMin/100000).toFixed(1)}L` : `₹${ticketSizeMin.toLocaleString('en-IN')}`} - {ticketSizeMax >= 100000 ? `₹${(ticketSizeMax/100000).toFixed(1)}L` : `₹${ticketSizeMax.toLocaleString('en-IN')}`}.
-                      </p>
-                    </div>
-
-                    {/* Purchase Cycle */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-neutral-700 block">Purchase Cycle</label>
-                      <select
-                        disabled={!!selectedCampaignId && !!campaigns.find(c => c.id === selectedCampaignId)?.hasRunFirstFile}
-                        value={purchaseCycle}
-                        onChange={(e) => setPurchaseCycle(e.target.value as any)}
-                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs font-semibold focus:outline-none cursor-pointer disabled:opacity-65 disabled:bg-neutral-100 disabled:cursor-not-allowed"
-                      >
-                        <option value="One-time">One-time Purchase</option>
-                        <option value="Recurring subscription">Recurring Subscription</option>
-                      </select>
-                    </div>
-
-                    {/* Purchase Channel */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-neutral-700 block">Purchase Channel</label>
-                      <select
-                        disabled={!!selectedCampaignId && !!campaigns.find(c => c.id === selectedCampaignId)?.hasRunFirstFile}
-                        value={purchaseChannel}
-                        onChange={(e) => setPurchaseChannel(e.target.value as any)}
-                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs font-semibold focus:outline-none cursor-pointer disabled:opacity-65 disabled:bg-neutral-100 disabled:cursor-not-allowed"
-                      >
-                        <option value="Online">Online Only</option>
-                        <option value="Offline">Offline Only</option>
-                        <option value="Both">Both (Omnichannel)</option>
-                      </select>
-                    </div>
-
-                    {/* Target cost per qualified lead */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-neutral-700 block">Target Cost per Qualified Lead (₹) <strong className="text-red-500">*</strong></label>
-                      <input 
-                        type="number"
-                        min="1"
-                        step="1"
-                        required
-                        disabled={!!selectedCampaignId && !!campaigns.find(c => c.id === selectedCampaignId)?.hasRunFirstFile}
-                        value={targetCostPerQualifiedLead}
-                        onChange={(e) => setTargetCostPerQualifiedLead(Math.max(1, Number(e.target.value)))}
-                        className="w-full bg-neutral-50 border border-neutral-200 focus:bg-white focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600 rounded-lg px-3 py-2 text-xs font-semibold focus:outline-none transition-all disabled:opacity-65 disabled:bg-neutral-100 disabled:cursor-not-allowed"
-                      />
-                      <p className="text-[9.5px] text-neutral-400 font-medium">Committed limit for High-confidence operational cost-per-lead.</p>
-                    </div>
-
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Col 2 & 3: File execution workspace & history */}
-              <div className="lg:col-span-2 space-y-6">
-                
-                {/* File Upload execution Workspace */}
-                <div className="bg-white border border-neutral-200/60 rounded-xl p-5 shadow-sm space-y-4">
-                  <h3 className="text-xs uppercase font-extrabold text-neutral-400 tracking-wider flex items-center gap-1.5">
-                    <UploadCloud size={14.5} />
-                    <span>Upload & Execute Candidate Roster</span>
-                  </h3>
-
-                  {/* Drag drop area */}
-                  <div 
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={handleFileDrop}
-                    className="border-2 border-dashed border-neutral-200 hover:border-blue-500 hover:bg-blue-50/10 rounded-xl p-6 text-center transition-all cursor-pointer space-y-2.5"
-                  >
-                    <div className="w-10 h-10 bg-neutral-50 border border-neutral-100 rounded-full flex items-center justify-center mx-auto text-neutral-400">
-                      <UploadCloud size={18} />
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-bold text-neutral-700">Drag & drop client rosters here</p>
-                      <p className="text-[10px] text-neutral-400 font-medium">Supports CSV, XLS, XLSX formats up to 20MB.</p>
-                    </div>
-
-                    <div className="flex justify-center gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={selectManualSample}
-                        className="px-3.5 py-1.5 bg-blue-50 text-blue-700 border border-blue-100 text-[10.5px] font-bold rounded-lg hover:bg-blue-100 transition-all cursor-pointer"
-                      >
-                        Simulate Sample CSV Upload
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Inline Validation Summary */}
-                  {pendingFile && (
-                    <div className="bg-neutral-50/50 border border-neutral-200/70 p-4.5 rounded-xl space-y-3.5">
-                      <div className="flex items-center justify-between text-xs border-b border-neutral-200/50 pb-2.5">
-                        <div className="flex items-center gap-2 font-bold text-neutral-800">
-                          <FileText size={13} className="text-neutral-400" />
-                          <span>{pendingFile.name}</span>
-                          <span className="text-[10px] font-mono text-neutral-400">({pendingFile.size})</span>
-                        </div>
-                        <button 
-                          onClick={() => setPendingFile(null)}
-                          className="text-neutral-400 hover:text-red-600 transition-colors cursor-pointer font-bold text-[10px]"
-                        >
-                          Clear File
-                        </button>
-                      </div>
-
-                      {/* Summary statistics grid */}
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="p-3 bg-white border border-neutral-200 rounded-lg text-center">
-                          <span className="text-[9px] uppercase font-bold text-neutral-400 block">Total Cohort Rows</span>
-                          <strong className="text-sm font-extrabold text-neutral-800">{(pendingFile.rowsAccepted + pendingFile.rowsSkipped).toLocaleString()}</strong>
-                        </div>
-                        <div className="p-3 bg-emerald-50/50 border border-emerald-100 rounded-lg text-center">
-                          <span className="text-[9px] uppercase font-bold text-emerald-600 block">Rows Accepted</span>
-                          <strong className="text-sm font-extrabold text-emerald-800">{pendingFile.rowsAccepted.toLocaleString()}</strong>
-                        </div>
-                        <div className="p-3 bg-amber-50/50 border border-amber-100 rounded-lg text-center">
-                          <span className="text-[9px] uppercase font-bold text-amber-600 block">Rows Skipped</span>
-                          <strong className="text-sm font-extrabold text-neutral-800">{pendingFile.rowsSkipped.toLocaleString()}</strong>
-                        </div>
-                      </div>
-
-                      {/* Skip breakdown reasons */}
-                      <div className="space-y-1.5 pt-1 bg-white border border-neutral-150 rounded-lg p-3">
-                        <span className="text-[9.5px] font-bold text-neutral-400 uppercase tracking-wider block">Skipped Records Audit Breakdown:</span>
-                        <div className="space-y-1">
-                          {pendingFile.skipReasons.map((reason, rIdx) => (
-                            <div key={rIdx} className="flex items-start justify-between text-[10.5px] font-semibold text-neutral-600">
-                              <span className="flex items-center gap-1">
-                                <span className="w-1 h-1 rounded-full bg-amber-500 mt-1.5 block shrink-0" />
-                                <span className="leading-tight">{reason.reason}</span>
-                              </span>
-                              <span className="text-neutral-400 font-mono text-[9px] font-bold shrink-0">{reason.count} rows</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Cost metrics and checkbox confirmation */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1.5">
-                        
-                        {/* Cost estimate for this file */}
-                        <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg flex items-center justify-between">
-                          <div className="space-y-0.5">
-                            <span className="text-[9px] uppercase font-extrabold text-emerald-700 block">Cost Estimate (This File)</span>
-                            <span className="text-[10px] text-neutral-400 font-medium">₹11.5 per evaluated record</span>
-                          </div>
-                          <strong className="text-base font-black text-emerald-800">₹{pendingFile.cost.toLocaleString('en-IN')}</strong>
-                        </div>
-
-                        {/* Running total across campaign */}
-                        <div className="p-3 bg-neutral-100 border border-neutral-200 rounded-lg flex items-center justify-between">
-                          <div className="space-y-0.5">
-                            <span className="text-[9px] uppercase font-extrabold text-neutral-600 block">Running Spend Total</span>
-                            <span className="text-[10px] text-neutral-400 font-medium">All historical files in batch</span>
-                          </div>
-                          <strong className="text-base font-black text-neutral-800">₹{(totalSpendForCampaign + pendingFile.cost).toLocaleString('en-IN')}</strong>
-                        </div>
-
-                      </div>
-
-                      {/* Consent Checkbox */}
-                      <div className="p-3 bg-[#eff6ff]/50 border border-[#bfdbfe]/50 rounded-lg flex items-start gap-2.5">
-                        <input 
-                          type="checkbox"
-                          id="consent_check"
-                          checked={consentConfirmed}
-                          onChange={(e) => setConsentConfirmed(e.target.checked)}
-                          className="mt-0.5 h-3.5 w-3.5 text-[#1e40af] focus:ring-[#1e40af]/30 rounded border-neutral-300 cursor-pointer"
-                        />
-                        <label htmlFor="consent_check" className="text-[10.5px] font-bold text-neutral-700 leading-tight cursor-pointer select-none">
-                          I confirm that this client contact cohort roster was explicitly collected under appropriate regulatory consent guidelines and satisfies compliance checklists.
-                        </label>
-                      </div>
-
-                      {/* RUN BUTTON */}
-                      <button
-                        type="button"
-                        onClick={handleRunFile}
-                        disabled={!consentConfirmed || (incomeWeight + spendWeight + propensityWeight !== 100) || (!selectedCampaignId && !campaignName.trim())}
-                        className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-xs shadow-md transition-all ${
-                          consentConfirmed && (incomeWeight + spendWeight + propensityWeight === 100) && (selectedCampaignId || campaignName.trim())
-                            ? 'bg-[#1e40af] hover:bg-[#1d4ed8] text-white cursor-pointer active:scale-98'
-                            : 'bg-neutral-100 text-neutral-400 border border-neutral-200 cursor-not-allowed'
-                        }`}
-                      >
-                        <ShieldCheck size={14} />
-                        <span>Run Lead Qualification (Approve & Execute File)</span>
-                      </button>
-
-                    </div>
-                  )}
-
-                </div>
-
-                {/* historical files in this campaign */}
-                {selectedCampaignId && (
-                  <div className="bg-white border border-neutral-200/60 rounded-xl p-5 shadow-sm space-y-4">
-                    <div>
-                      <h3 className="text-xs uppercase font-extrabold text-neutral-400 tracking-wider">Historical Scored Files in this Campaign</h3>
-                      <p className="text-[10.5px] text-neutral-400 font-medium">Audit logs of client rosters successfully scored under this campaign batch.</p>
-                    </div>
-
-                    <div className="space-y-3.5">
-                      {campaigns.find(c => c.id === selectedCampaignId)?.files?.length ? (
-                        campaigns.find(c => c.id === selectedCampaignId)?.files?.map(file => (
-                          <div key={file.id} className="bg-neutral-50 border border-neutral-150 p-4 rounded-xl space-y-2.5">
-                            <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
-                              <div className="flex items-center gap-2">
-                                <FileText className="text-neutral-400" size={13} />
-                                <span className="font-bold text-neutral-800 text-xs truncate max-w-[240px]">{file.fileName}</span>
-                                <span className="text-[9.5px] text-neutral-400 font-mono">({file.fileSize})</span>
-                              </div>
-                              <span className="text-[9.5px] font-mono text-neutral-400 font-bold">{file.dateUploaded}</span>
-                            </div>
-
-                            <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                              <div className="p-2 bg-white rounded-lg border border-neutral-200">
-                                <span className="text-[8.5px] text-neutral-400 block uppercase font-bold">File ID</span>
-                                <strong className="text-[10.5px] text-neutral-700 font-bold font-mono">{file.id}</strong>
-                              </div>
-                              <div className="p-2 bg-emerald-50/40 rounded-lg border border-emerald-100">
-                                <span className="text-[8.5px] text-emerald-600 block uppercase font-bold">Accepted</span>
-                                <strong className="text-[10.5px] text-emerald-800 font-extrabold">{file.rowsAccepted.toLocaleString()}</strong>
-                              </div>
-                              <div className="p-2 bg-amber-50/40 rounded-lg border border-amber-100">
-                                <span className="text-[8.5px] text-amber-600 block uppercase font-bold">Skipped</span>
-                                <strong className="text-[10.5px] text-amber-800 font-extrabold">{file.rowsSkipped.toLocaleString()}</strong>
-                              </div>
-                              <div className="p-2 bg-neutral-100 rounded-lg border border-neutral-150">
-                                <span className="text-[8.5px] text-neutral-500 block uppercase font-bold">File Cost</span>
-                                <strong className="text-[10.5px] text-neutral-800 font-black">₹{file.cost.toLocaleString('en-IN')}</strong>
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="text-center py-6 text-neutral-400 font-medium text-xs space-y-1">
-                          <p>No roster files have been run under this campaign yet.</p>
-                          <p className="text-[10px] text-neutral-400">Upload and validate a candidate roster at the top to trigger your first run.</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-              </div>
-
-            </div>
-          )}
-
-        </div>
+        <LeadQualCampaignBuilder 
+          selectedCampaign={clonedCampaignForBuilder || (selectedCampaignId ? campaigns.find(c => c.id === selectedCampaignId) || null : null)}
+          onCancel={() => {
+            setClonedCampaignForBuilder(null);
+            setSelectedCampaignId(null);
+            setQualView('dashboard');
+          }}
+          onRun={handleRunLeadQualCampaign}
+          onClone={(camp) => {
+            setClonedCampaignForBuilder(null);
+            handleCloneCampaign(camp);
+          }}
+        />
       )}
 
       {/* VIEW 3: CAMPAIGN RESULTS LIST & DETAILED DRILLDOWN (QUALIFIED FEED) */}

@@ -41,6 +41,7 @@ export interface Lead {
   spendBucket: string; // Net Worth Bucket or Spend Capacity
   confidence: 'High' | 'Medium' | 'Low';
   competitors: string[]; // Active competitors pitching to them
+  topConversionFactors?: string[]; // 3 vehicle-related factors (e.g. Safety, Reliability, Comfort)
   campaignId: string; // Source campaign
   dateReceived: string; // "YYYY-MM-DD"
   assignedTo: string; // Rajesh K., Ananya S., Sidhartha R., Unassigned
@@ -75,6 +76,7 @@ const INITIAL_LEADS: Lead[] = [
     spendBucket: "₹5Cr - ₹10Cr",
     confidence: "High",
     competitors: ["HDFC Bank", "HSBC"],
+    topConversionFactors: ["Safety", "Reliability", "Comfort"],
     campaignId: "CAMP-10485", // Global UHNI Yield
     dateReceived: "2026-09-15",
     assignedTo: "Sidhartha R.",
@@ -97,6 +99,7 @@ const INITIAL_LEADS: Lead[] = [
     spendBucket: "₹10Cr+",
     confidence: "High",
     competitors: ["Kotak Wealth"],
+    topConversionFactors: ["Performance", "Cabin Luxury", "Brand Prestige"],
     campaignId: "CAMP-10485", // Global UHNI Yield
     dateReceived: "2026-09-14",
     assignedTo: "Ananya S.",
@@ -121,6 +124,7 @@ const INITIAL_LEADS: Lead[] = [
     spendBucket: "₹1Cr - ₹5Cr",
     confidence: "Medium",
     competitors: ["ICICI Bank", "Standard Chartered"],
+    topConversionFactors: ["Build Quality", "Low Maintenance", "Safety"],
     campaignId: "CAMP-94182", // Corporate Trust Advantage
     dateReceived: "2026-09-13",
     assignedTo: "Rajesh K.",
@@ -143,6 +147,7 @@ const INITIAL_LEADS: Lead[] = [
     spendBucket: "₹50L - ₹1Cr",
     confidence: "Low",
     competitors: ["None"],
+    topConversionFactors: ["Fuel Economy", "Reliability", "Comfort"],
     campaignId: "CAMP-38102", // Sovereign Yields Elite
     dateReceived: "2026-09-12",
     assignedTo: "Unassigned",
@@ -164,6 +169,7 @@ const INITIAL_LEADS: Lead[] = [
     spendBucket: "₹10Cr+",
     confidence: "High",
     competitors: ["HDFC Bank", "Kotak Wealth", "HSBC"],
+    topConversionFactors: ["Executive Seating", "Cabin Luxury", "Brand Prestige"],
     campaignId: "CAMP-10485", // Global UHNI Yield
     dateReceived: "2026-09-10",
     assignedTo: "Sidhartha R.",
@@ -189,6 +195,7 @@ const INITIAL_LEADS: Lead[] = [
     spendBucket: "₹5Cr - ₹10Cr",
     confidence: "Medium",
     competitors: ["Axis Bank"],
+    topConversionFactors: ["Safety", "Interior Space", "Comfort"],
     campaignId: "CAMP-94182", // Corporate Trust Advantage
     dateReceived: "2026-09-08",
     assignedTo: "Ananya S.",
@@ -212,6 +219,7 @@ const INITIAL_LEADS: Lead[] = [
     spendBucket: "₹1Cr - ₹5Cr",
     confidence: "Medium",
     competitors: ["ICICI Bank", "HDFC Bank"],
+    topConversionFactors: ["Resale Value", "Fuel Economy", "Low Maintenance"],
     campaignId: "CAMP-49520", // Tier 2 Mass Affluent Boost
     dateReceived: "2026-09-06",
     assignedTo: "Rajesh K.",
@@ -236,6 +244,7 @@ const INITIAL_LEADS: Lead[] = [
     spendBucket: "₹50L - ₹1Cr",
     confidence: "Low",
     competitors: ["None"],
+    topConversionFactors: ["Infotainment Tech", "Safety", "Comfort"],
     campaignId: "CAMP-49520", // Tier 2 Mass Affluent Boost
     dateReceived: "2026-09-05",
     assignedTo: "Unassigned",
@@ -257,6 +266,7 @@ const INITIAL_LEADS: Lead[] = [
     spendBucket: "₹5Cr - ₹10Cr",
     confidence: "High",
     competitors: ["Kotak Wealth", "HSBC"],
+    topConversionFactors: ["Driving Dynamics", "Performance", "Safety"],
     campaignId: "CAMP-20194", // NRE Deposits Spark
     dateReceived: "2026-08-12",
     assignedTo: "Sidhartha R.",
@@ -281,6 +291,7 @@ const INITIAL_LEADS: Lead[] = [
     spendBucket: "₹1Cr - ₹5Cr",
     confidence: "Medium",
     competitors: ["HDFC Bank"],
+    topConversionFactors: ["Fuel Economy", "Interior Space", "Reliability"],
     campaignId: "CAMP-55102", // Corporate Salary Elevate
     dateReceived: "2026-08-15",
     assignedTo: "Rajesh K.",
@@ -295,6 +306,21 @@ const INITIAL_LEADS: Lead[] = [
   }
 ];
 
+// Vehicle Aspect Tag Helper
+const getFactorBadgeClass = (factor: string) => {
+  const f = factor.toLowerCase();
+  if (f.includes('safet')) return 'bg-emerald-50 text-emerald-700 border-emerald-200/80';
+  if (f.includes('reliab') || f.includes('maint')) return 'bg-blue-50 text-blue-700 border-blue-200/80';
+  if (f.includes('comfort') || f.includes('seat')) return 'bg-amber-50 text-amber-700 border-amber-200/80';
+  if (f.includes('perf') || f.includes('dynam')) return 'bg-purple-50 text-purple-700 border-purple-200/80';
+  if (f.includes('lux') || f.includes('prest')) return 'bg-rose-50 text-rose-700 border-rose-200/80';
+  if (f.includes('fuel') || f.includes('eco')) return 'bg-teal-50 text-teal-700 border-teal-200/80';
+  if (f.includes('space')) return 'bg-orange-50 text-orange-700 border-orange-200/80';
+  if (f.includes('tech') || f.includes('info') || f.includes('adas')) return 'bg-cyan-50 text-cyan-700 border-cyan-200/80';
+  if (f.includes('resale') || f.includes('val')) return 'bg-indigo-50 text-indigo-700 border-indigo-200/80';
+  return 'bg-neutral-100 text-neutral-700 border-neutral-200';
+};
+
 export const LeadFeed: React.FC<LeadFeedProps> = ({ 
   campaigns,
   initialCampaignFilter,
@@ -305,7 +331,17 @@ export const LeadFeed: React.FC<LeadFeedProps> = ({
     const cached = localStorage.getItem('zenith_leads');
     if (cached) {
       try {
-        return JSON.parse(cached);
+        const parsed: Lead[] = JSON.parse(cached);
+        return parsed.map((item, idx) => {
+          if (!item.topConversionFactors || item.topConversionFactors.length === 0) {
+            const defaultItem = INITIAL_LEADS[idx % INITIAL_LEADS.length];
+            return {
+              ...item,
+              topConversionFactors: defaultItem.topConversionFactors || ["Safety", "Reliability", "Comfort"]
+            };
+          }
+          return item;
+        });
       } catch (err) {
         return INITIAL_LEADS;
       }
@@ -599,7 +635,7 @@ export const LeadFeed: React.FC<LeadFeedProps> = ({
   const handleExportCSV = () => {
     const headers = [
       "Lead ID", "Name", "Email", "Phone", "Company", "Role", "Geography",
-      "Confidence", "Wealth Tier", "Product Category", "Source Campaign ID", "Competitors Active", "Assigned To", "Date Received", "Status"
+      "Confidence", "Top Conversion Factors", "Wealth Tier", "Product Category", "Source Campaign ID", "Competitors Active", "Assigned To", "Date Received", "Status"
     ];
     const rows = filteredLeads.map(l => [
       l.id,
@@ -610,6 +646,7 @@ export const LeadFeed: React.FC<LeadFeedProps> = ({
       `"${l.role}"`,
       l.location,
       l.confidence,
+      `"${(l.topConversionFactors || ['Safety', 'Reliability', 'Comfort']).join(', ')}"`,
       l.persona,
       l.category,
       l.campaignId,
@@ -932,6 +969,11 @@ export const LeadFeed: React.FC<LeadFeedProps> = ({
                       {sortField === 'persona' && (sortOrder === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />)}
                     </div>
                   </th>
+                  <th className="px-5 py-4">
+                    <div className="flex items-center gap-1">
+                      <span>Top Conversion Factors</span>
+                    </div>
+                  </th>
                   <th className="px-5 py-4 cursor-pointer hover:text-neutral-700 transition-colors" onClick={() => handleSort('spendBucket')}>
                     <div className="flex items-center gap-1">
                       <span>Capital Profile</span>
@@ -1004,6 +1046,23 @@ export const LeadFeed: React.FC<LeadFeedProps> = ({
                             <span className="text-neutral-400 text-[8px]">&bull;</span>
                             <span className="text-neutral-500 bg-neutral-100 px-1.5 py-0.2 rounded border border-neutral-200/50">{lead.category}</span>
                           </div>
+                        </div>
+                      </td>
+
+                      {/* Top Conversion Factors */}
+                      <td className="px-5 py-4">
+                        <div className="flex flex-wrap gap-1.5 max-w-[220px]">
+                          {(lead.topConversionFactors && lead.topConversionFactors.length > 0 
+                            ? lead.topConversionFactors 
+                            : ['Safety', 'Reliability', 'Comfort']
+                          ).slice(0, 3).map((factor, idx) => (
+                            <span 
+                              key={idx}
+                              className={`inline-flex items-center text-[10px] font-bold border px-2 py-0.5 rounded-md ${getFactorBadgeClass(factor)}`}
+                            >
+                              {factor}
+                            </span>
+                          ))}
                         </div>
                       </td>
 
@@ -1210,7 +1269,25 @@ export const LeadFeed: React.FC<LeadFeedProps> = ({
                   </div>
                 </div>
 
-                <div className="pt-3.5 border-t border-neutral-200/60 space-y-2">
+                {/* Vehicle Conversion Factors in Drawer */}
+                <div className="pt-3 border-t border-neutral-200/50 space-y-1.5">
+                  <span className="text-[10.5px] text-neutral-400 font-medium block">Top Conversion Factors (Vehicle Intent)</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(selectedLead.topConversionFactors && selectedLead.topConversionFactors.length > 0 
+                      ? selectedLead.topConversionFactors 
+                      : ['Safety', 'Reliability', 'Comfort']
+                    ).map((factor, idx) => (
+                      <span 
+                        key={idx} 
+                        className={`text-[11px] font-bold border px-2.5 py-1 rounded-md ${getFactorBadgeClass(factor)}`}
+                      >
+                        {factor}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-neutral-200/60 space-y-2">
                   <span className="text-[10.5px] text-neutral-400 font-medium block">Source Campaign Formula</span>
                   <div className="bg-white border border-neutral-200/50 p-2.5 rounded-lg flex items-center justify-between text-xs font-semibold text-neutral-700">
                     <span className="truncate pr-4">{getCampaignName(selectedLead.campaignId)}</span>

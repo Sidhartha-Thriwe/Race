@@ -872,7 +872,7 @@ export const GlobalOverview: React.FC<GlobalOverviewProps> = ({ setActiveSection
         
         {/* Module 1: Lead Gen Drill Card */}
         <div 
-          onClick={() => setActiveSection('leadgen-dashboard')}
+          onClick={() => setActiveSection('leadgen-dashboard-v2')}
           className="bg-white border border-neutral-200 hover:border-blue-300 rounded-xl p-5 shadow-xs cursor-pointer group flex flex-col justify-between transition-all hover:shadow-md"
         >
           <div>
@@ -906,7 +906,7 @@ export const GlobalOverview: React.FC<GlobalOverviewProps> = ({ setActiveSection
 
         {/* Module 2: Lead Qual Drill Card */}
         <div 
-          onClick={() => setActiveSection('qual-dashboard')}
+          onClick={() => setActiveSection('qual-dashboard-v2')}
           className="bg-white border border-neutral-200 hover:border-emerald-300 rounded-xl p-5 shadow-xs cursor-pointer group flex flex-col justify-between transition-all hover:shadow-md"
         >
           <div>
@@ -940,7 +940,7 @@ export const GlobalOverview: React.FC<GlobalOverviewProps> = ({ setActiveSection
 
         {/* Module 3: Customer Insight Drill Card */}
         <div 
-          onClick={() => setActiveSection('insight-dashboard')}
+          onClick={() => setActiveSection('insight-dashboard-v2')}
           className="bg-white border border-neutral-200 hover:border-indigo-300 rounded-xl p-5 shadow-xs cursor-pointer group flex flex-col justify-between transition-all hover:shadow-md"
         >
           <div>
