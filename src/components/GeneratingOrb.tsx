@@ -25,15 +25,26 @@ export interface GeneratingOrbProps {
  * screen has no way to back up.
  */
 const FILLER = [
-  'Thinking hard…',
-  'Contemplating…',
-  'Connecting the dots…',
-  'Reading between the lines…',
-  'Mulling it over…',
-  'Weighing it up…',
-  'Piecing it together…',
-  'Pondering…',
+  'Thinking hard…', 'Contemplating…', 'Connecting the dots…', 'Reading between the lines…',
+  'Mulling it over…', 'Weighing it up…', 'Piecing it together…', 'Pondering…',
+  'Chewing on it…', 'Sleeping on it, briefly…', 'Squinting at the details…', 'Following a hunch…',
+  'Cross-checking…', 'Turning it over…', 'Letting it simmer…', 'Looking from another angle…',
+  'Sharpening the pencil…', 'Stirring the pot…', 'Untangling things…', 'Lining things up…',
+  'Putting two and two together…', 'Making sense of it…', 'Doing the careful bit…', 'Gathering thoughts…',
+  'Reading the room…', 'Tying up loose ends…', 'Giving it a good think…', 'Sifting through it…',
+  'Staying curious…', 'Holding that thought…', 'Taking a closer look…', 'Almost with you…',
 ];
+
+/** A shuffled pass through every line before any repeats; a reshuffle never starts on the last one shown. */
+const shuffled = (avoidFirst?: string) => {
+  const a = [...FILLER];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j]!, a[i]!];
+  }
+  if (avoidFirst && a[0] === avoidFirst) [a[0], a[1]] = [a[1]!, a[0]!];
+  return a;
+};
 const FILLER_MS = 2600;
 
 export const GeneratingOrb: React.FC<GeneratingOrbProps> = ({
@@ -43,15 +54,20 @@ export const GeneratingOrb: React.FC<GeneratingOrbProps> = ({
   onCancel,
   className = '',
 }) => {
-  const [currentIndex, setCurrentIndex] = useState<number>(() => Math.floor(Math.random() * FILLER.length));
-  const messages = FILLER;
+  const [deck, setDeck] = useState<string[]>(() => shuffled());
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const messages = deck;
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % FILLER.length);
+      setCurrentIndex((prev) => {
+        if (prev + 1 < deck.length) return prev + 1;
+        setDeck((d) => shuffled(d[d.length - 1]));
+        return 0;
+      });
     }, FILLER_MS);
     return () => clearInterval(timer);
-  }, []);
+  }, [deck.length]);
 
   const content = (
     <div className={`flex flex-col items-center justify-center text-center select-none ${className}`}>
