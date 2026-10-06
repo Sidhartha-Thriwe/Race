@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Activity, UploadCloud, FileSpreadsheet, Lock, Copy, X, Check, AlertTriangle } from 'lucide-react';
+import { Activity, UploadCloud, FileSpreadsheet, Lock, Copy, X, Check, AlertTriangle, ChevronRight } from 'lucide-react';
 import { QualCampaign, QualFile } from './LeadQualification';
 import {
   WizardHeader,
   WizardCard,
+  CollapsibleCard,
   WizardFooter,
   TopEmailsStep,
   ReviewConsentStep,
   buildConsent,
   emailsComplete,
   cleanEmails,
+  hasInvalidEmails,
   FieldLabel,
   inputCls,
   Chip,
@@ -35,17 +37,17 @@ const INDUSTRY_BUSINESS_LINES_MAP: Record<string, string[]> = {
 };
 
 const Tile: React.FC<{ label: string; value: string; sub?: string; tone?: 'ok' | 'warn' }> = ({ label, value, sub, tone }) => (
-  <div className="rounded-[14px] bg-[#f5f5f7] p-[18px]">
-    <div className="text-[13px] text-[#6e6e73]">{label}</div>
-    <div className="mt-1 text-[24px] font-semibold tracking-[-0.01em] text-[#1d1d1f]">{value}</div>
+  <div className="rounded-lg bg-neutral-50 border border-neutral-200/70 p-4">
+    <div className="text-[11px] text-neutral-500 font-medium">{label}</div>
+    <div className="mt-1 text-2xl font-bold tracking-tight text-neutral-900">{value}</div>
     {sub && (
-      <div className={`mt-0.5 text-[13px] ${tone === 'warn' ? 'text-[#b25000]' : tone === 'ok' ? 'text-[#1d7a3a]' : 'text-[#6e6e73]'}`}>{sub}</div>
+      <div className={`mt-0.5 text-[11px] font-medium ${tone === 'warn' ? 'text-amber-600' : tone === 'ok' ? 'text-emerald-600' : 'text-neutral-400'}`}>{sub}</div>
     )}
   </div>
 );
 
 const LockedNote: React.FC = () => (
-  <span className="inline-flex items-center gap-1 text-[13px] font-normal text-[#6e6e73]"><Lock size={11} /> Fixed in existing campaign</span>
+  <span className="inline-flex items-center gap-1 text-[10px] text-neutral-400 font-mono"><Lock size={10} /> Locked</span>
 );
 
 export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = ({
@@ -109,6 +111,7 @@ export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = (
   const [emails, setEmails] = useState<string[]>(['', '', '', '', '']);
   const [acks, setAcks] = useState<boolean[]>([false, false, false, false]);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [moreOptionsOpen, setMoreOptionsOpen] = useState<boolean>(false);
 
   // Processing simulation state
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -225,7 +228,7 @@ export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = (
   }, [campaignName, targetCQC, businessLine, pendingFile]);
 
   const allAcked = acks.every(Boolean);
-  const canRun = isFormValid && emailsComplete(emails) && allAcked;
+  const canRun = isFormValid && allAcked && !hasInvalidEmails(emails);
 
   // Execute Run Simulation
   const handleRunClick = () => {
@@ -296,7 +299,7 @@ export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = (
   const step2Valid = Boolean(pendingFile && pendingFile.rowsAccepted > 0);
 
   const nextDisabled =
-    step === 1 ? !step1Valid : step === 2 ? !step2Valid : step === 3 ? !emailsComplete(emails) : !canRun;
+    step === 1 ? !step1Valid : step === 2 ? !step2Valid : step === 3 ? hasInvalidEmails(emails) : !canRun;
 
   const handleNext = () => {
     if (step === 1) {
@@ -308,7 +311,7 @@ export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = (
       if (!step2Valid) return;
       goNext();
     } else if (step === 3) {
-      if (!emailsComplete(emails)) return;
+      if (hasInvalidEmails(emails)) return;
       goNext();
     }
   };
@@ -344,7 +347,7 @@ export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = (
   ];
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-16 font-sans" id="lead-qual-builder-container">
+    <div className="space-y-6 w-full pb-16 font-sans" id="lead-qual-builder-container">
       {isProcessing ? (
         <div className="bg-white rounded-[20px] p-8 sm:p-12 shadow-[0_0_0_1px_rgba(0,0,0,0.06)] text-center space-y-6 max-w-2xl mx-auto my-8">
           <div className="relative w-20 h-20 mx-auto flex items-center justify-center bg-[#f5f5f7] rounded-full">
@@ -383,17 +386,17 @@ export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = (
           />
 
           {isExistingCampaign && (
-            <div>
-              <span className="inline-flex items-center gap-1.5 rounded-[10px] bg-[#f0f0f3] px-2.5 py-[3px] text-xs font-medium text-[#1d1d1f]">
-                <Lock size={11} /> Locked Campaign
+            <div className="flex items-center justify-between gap-3 p-3 bg-neutral-50 border border-neutral-200 rounded-lg">
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-700">
+                <Lock size={12} className="text-neutral-500" /> Locked Campaign Parameters
               </span>
             </div>
           )}
 
           {step === 1 && (
             <WizardCard title="Campaign basics" lead="Set your target first. We will check every audience file against it.">
-              <div className="flex max-w-[640px] flex-col gap-7">
-                <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
                     <FieldLabel htmlFor="lq-name" required>Campaign name</FieldLabel>
                     {isExistingCampaign && <LockedNote />}
@@ -411,43 +414,16 @@ export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = (
                     className={inputCls(touched.campaignName && !campaignName.trim())}
                   />
                   {touched.campaignName && !campaignName.trim() && (
-                    <p className="text-[13px] text-[#d70015]">Campaign name is required.</p>
+                    <p className="text-[11px] font-medium text-rose-500">Campaign name is required.</p>
                   )}
                 </div>
 
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <FieldLabel htmlFor="lq-cqc" required>Target CQC</FieldLabel>
-                    {isExistingCampaign && <LockedNote />}
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base text-[#6e6e73]">₹</span>
-                    <input
-                      id="lq-cqc"
-                      type="number"
-                      disabled={isExistingCampaign}
-                      value={targetCQC || ''}
-                      onChange={(e) => {
-                        const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                        setTargetCQC(val);
-                        setTouched((prev) => ({ ...prev, targetCQC: true }));
-                      }}
-                      placeholder="18"
-                      className={`${inputCls(touched.targetCQC && (!targetCQC || targetCQC <= 0))} pl-9`}
-                    />
-                  </div>
-                  <p className="text-[13px] text-[#6e6e73]">Cost per Qualified Customer. What you are willing to pay to qualify one prospect. Your last 30 days average: ₹18.</p>
-                  {touched.targetCQC && (!targetCQC || targetCQC <= 0) && (
-                    <p className="text-[13px] text-[#d70015]">Target CQC must be greater than ₹0.</p>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
                     <FieldLabel required>Business line</FieldLabel>
                     {isExistingCampaign && <LockedNote />}
                   </div>
-                  <div className="flex flex-wrap gap-2.5">
+                  <div className="flex flex-wrap gap-2">
                     {clientProfile.businessLines.map((line: string) => (
                       <Chip
                         key={line}
@@ -464,9 +440,35 @@ export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = (
                       </Chip>
                     ))}
                   </div>
-                  <p className="text-[13px] text-[#6e6e73]">Sets the evaluation and propensity model for this campaign.</p>
                   {touched.businessLine && !businessLine && (
-                    <p className="text-[13px] text-[#d70015]">Please select a business line.</p>
+                    <p className="text-[11px] font-medium text-rose-500">Please select a business line.</p>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1.5 md:col-span-2 max-w-md">
+                  <div className="flex items-center justify-between">
+                    <FieldLabel htmlFor="lq-cqc" required>Target CQC</FieldLabel>
+                    {isExistingCampaign && <LockedNote />}
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-neutral-400 font-medium">₹</span>
+                    <input
+                      id="lq-cqc"
+                      type="number"
+                      disabled={isExistingCampaign}
+                      value={targetCQC || ''}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                        setTargetCQC(val);
+                        setTouched((prev) => ({ ...prev, targetCQC: true }));
+                      }}
+                      placeholder="18"
+                      className={`${inputCls(touched.targetCQC && (!targetCQC || targetCQC <= 0))} pl-8`}
+                    />
+                  </div>
+                  <p className="text-[11px] text-neutral-400">Cost per Qualified Customer. What you are willing to pay to qualify one prospect. Last 30d avg: ₹18.</p>
+                  {touched.targetCQC && (!targetCQC || targetCQC <= 0) && (
+                    <p className="text-[11px] font-medium text-rose-500">Target CQC must be greater than ₹0.</p>
                   )}
                 </div>
               </div>
@@ -479,7 +481,7 @@ export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = (
                 title="Audience file"
                 lead="Rows missing both email and phone are skipped individually, without rejecting the whole file."
               >
-                <div className="flex flex-col gap-2.5">
+                <div className="flex flex-col gap-3">
                   <FieldLabel required>Upload Audience File</FieldLabel>
                   <input
                     type="file"
@@ -494,51 +496,51 @@ export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = (
                       onDragOver={handleDragOver}
                       onDrop={handleDrop}
                       onClick={() => fileInputRef.current?.click()}
-                      className="cursor-pointer rounded-[14px] border border-dashed border-[#d2d2d7] bg-[#f5f5f7] p-10 text-center transition-colors hover:border-[#86868b]"
+                      className="cursor-pointer rounded-xl border-2 border-dashed border-neutral-200 bg-neutral-50/50 p-8 text-center transition-colors hover:border-blue-500 hover:bg-blue-50/20"
                     >
-                      <UploadCloud size={28} className="mx-auto text-[#6e6e73]" />
-                      <h4 className="mt-3 text-[15px] font-semibold text-[#1d1d1f]">Click or drag and drop your audience file</h4>
-                      <p className="mt-1 text-[13px] text-[#6e6e73]">CSV, XLS or XLSX · up to 25 MB</p>
+                      <UploadCloud size={24} className="mx-auto mb-2 text-blue-600" />
+                      <h4 className="text-xs font-bold text-neutral-800">Click or drag and drop your audience file</h4>
+                      <p className="mt-0.5 text-[11px] text-neutral-400">CSV, XLS or XLSX · up to 25 MB</p>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between rounded-[14px] bg-[#f5f5f7] px-[18px] py-4">
+                    <div className="flex items-center justify-between rounded-lg bg-neutral-50 border border-neutral-200/80 px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <FileSpreadsheet size={22} className="text-[#1d1d1f]" />
+                        <FileSpreadsheet size={20} className="text-blue-600" />
                         <div>
-                          <div className="text-[15px] font-medium text-[#1d1d1f]">{pendingFile.name}</div>
-                          <div className="text-[13px] text-[#6e6e73]">{pendingFile.size}</div>
+                          <div className="text-xs font-bold text-neutral-900">{pendingFile.name}</div>
+                          <div className="text-[11px] text-neutral-400 font-mono">{pendingFile.size}</div>
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => setPendingFile(null)}
-                        className="rounded-full p-1.5 text-[#6e6e73] hover:bg-[#e8e8ed] hover:text-[#1d1d1f]"
+                        className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-200/60 hover:text-neutral-700 transition-colors cursor-pointer"
                         title="Replace file"
                       >
-                        <X size={16} />
+                        <X size={14} />
                       </button>
                     </div>
                   )}
                   {touched.file && !pendingFile && (
-                    <p className="text-[13px] text-[#d70015]">Upload an audience file with at least one accepted row.</p>
+                    <p className="text-[11px] font-medium text-rose-500">Upload an audience file with at least one accepted row.</p>
                   )}
                 </div>
 
                 {pendingFile && (
                   <>
                     <div className="flex flex-col gap-3">
-                      <h4 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-[#6e6e73]">Validation</h4>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <h4 className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">Validation Breakdown</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <Tile label="Accepted rows" value={pendingFile.rowsAccepted.toLocaleString('en-IN')} sub="Ready for qualification and scoring" />
                         <Tile label="Skipped rows" value={pendingFile.rowsSkipped.toLocaleString('en-IN')} />
                       </div>
-                      <div className="rounded-[14px] bg-[#f5f5f7] px-[18px] py-4">
-                        <div className="mb-2 text-sm font-semibold text-[#1d1d1f]">Why rows were skipped</div>
+                      <div className="rounded-lg border border-neutral-200/70 p-4 bg-white">
+                        <div className="mb-2 text-xs font-bold text-neutral-800">Why rows were skipped</div>
                         <ul className="flex flex-col gap-1.5">
                           {pendingFile.skipReasons.map((r, idx) => (
-                            <li key={idx} className="flex justify-between gap-4 text-sm text-[#3a3a3c]">
+                            <li key={idx} className="flex justify-between gap-4 text-xs text-neutral-600">
                               <span>{r.reason}</span>
-                              <span className="font-medium text-[#1d1d1f]">{r.count}</span>
+                              <span className="font-mono font-semibold text-neutral-900">{r.count}</span>
                             </li>
                           ))}
                         </ul>
@@ -546,8 +548,8 @@ export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = (
                     </div>
 
                     <div className="flex flex-col gap-3">
-                      <h4 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-[#6e6e73]">Cost &amp; target check</h4>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <h4 className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">Cost &amp; Target Check</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <Tile label="Cost estimate (this file)" value={`₹${pendingFile.cost.toLocaleString('en-IN')}`} sub={`${pendingFile.rowsAccepted.toLocaleString('en-IN')} rows`} />
                         <Tile label="Running total spend" value={`₹${runningTotalSpend.toLocaleString('en-IN')}`} sub={isExistingCampaign ? 'Cumulative' : 'Initial file'} />
                         <Tile
@@ -562,23 +564,19 @@ export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = (
                 )}
               </WizardCard>
 
-              <WizardCard>
-                <div className="-mb-1 flex items-center gap-2.5">
-                  <h3 className="text-[22px] font-semibold tracking-[-0.01em] text-[#1d1d1f]">More options</h3>
-                  <span className="rounded-full bg-[#f0f0f3] px-2.5 py-[3px] text-xs font-medium text-[#6e6e73]">Optional</span>
-                </div>
-                <div className="flex max-w-[640px] flex-col gap-2">
+              <CollapsibleCard title="More Options" badge="Optional" isOpen={moreOptionsOpen} onToggle={() => setMoreOptionsOpen(!moreOptionsOpen)}>
+                <div className="flex flex-col gap-1.5 max-w-xl">
                   <FieldLabel htmlFor="lq-notes">Internal notes / objective</FieldLabel>
                   <textarea
                     id="lq-notes"
-                    rows={3}
+                    rows={2}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder="Record internal notes, qualification objectives, or source attribution..."
-                    className="w-full rounded-xl border border-[#d2d2d7] bg-white px-4 py-3 text-base text-[#1d1d1f] outline-none focus:border-[#0071e3]"
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3.5 py-2 text-xs text-neutral-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-neutral-400"
                   />
                 </div>
-              </WizardCard>
+              </CollapsibleCard>
             </>
           )}
 
@@ -598,6 +596,15 @@ export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = (
               sections={reviewSections}
               acks={acks}
               onToggle={(i) => setAcks((prev) => prev.map((v, idx) => (idx === i ? !v : v)))}
+              walletCost={{
+                currentBalance: 850000,
+                campaignCost: pendingFile ? pendingFile.cost : 0,
+                costLabel: 'Qualification File Cost',
+                costSubtext: `${pendingFile ? pendingFile.rowsAccepted.toLocaleString('en-IN') : 0} accepted rows · ~₹${estCQC || 16}/record qualification fee`,
+                unitRateLabel: 'Est. CQC',
+                unitRateValue: `Est. CQC: ₹${estCQC || targetCQC || 16}`,
+                pacingNote: `${pendingFile ? pendingFile.name : 'Audience roster'} (${pendingFile?.size || '0 KB'})`
+              }}
             />
           )}
 
@@ -610,17 +617,23 @@ export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = (
               nextDisabled={nextDisabled}
             />
           ) : (
-            <div className="mt-2 flex items-center justify-between">
-              <button type="button" onClick={goBack} className="px-2 text-base font-medium text-[#0071e3] hover:opacity-80">Back</button>
+            <div className="flex items-center justify-between pt-4 border-t border-neutral-200/70 mt-4">
+              <button 
+                type="button" 
+                onClick={goBack} 
+                className="text-xs font-semibold text-neutral-600 hover:text-neutral-900 px-3 py-2 rounded-lg hover:bg-neutral-100 transition-colors cursor-pointer"
+              >
+                Back
+              </button>
               <div className="flex items-center gap-3">
-                <span className="text-[13px] text-[#6e6e73]">Step 4 of 4</span>
+                <span className="text-[11px] font-mono text-neutral-400 font-medium">Step 4 of 4</span>
                 {isExistingCampaign && selectedCampaign && (
                   <button
                     type="button"
                     onClick={() => onClone(selectedCampaign)}
-                    className="inline-flex h-12 items-center gap-2 rounded-full bg-[#e8e8ed] px-7 text-base font-medium text-[#1d1d1f]"
+                    className="h-9 sm:h-10 px-4 text-xs font-semibold bg-white hover:bg-neutral-50 text-neutral-700 border border-neutral-200 rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Copy size={14} /> Clone campaign
+                    <Copy size={13} /> Clone campaign
                   </button>
                 )}
                 <button
@@ -628,9 +641,10 @@ export const LeadQualCampaignBuilder: React.FC<LeadQualCampaignBuilderProps> = (
                   id="run_qualification_campaign_btn"
                   disabled={!canRun}
                   onClick={handleRunClick}
-                  className="h-12 rounded-full bg-[#0071e3] px-7 text-base font-medium text-white transition-colors hover:bg-[#0077ed] disabled:cursor-not-allowed disabled:bg-[#b9d7f7]"
+                  className="h-9 sm:h-10 px-5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-98"
                 >
-                  Run qualification
+                  <span>Run qualification</span>
+                  <ChevronRight size={14} />
                 </button>
               </div>
             </div>

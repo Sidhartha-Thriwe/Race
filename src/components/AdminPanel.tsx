@@ -437,7 +437,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
       {/* Main Panel Area */}
       <main className="flex-1 min-w-0 flex flex-col h-screen overflow-y-auto">
         {/* Inner Content Centering / Spacing */}
-        <div className="flex-1 w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-6">
+        <div className="flex-1 w-full mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-6">
           
           {/* Conditionally render header based on active sub-section */}
           {activeSection === 'dashboard' ? (

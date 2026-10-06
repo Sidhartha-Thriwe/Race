@@ -14,12 +14,13 @@ import {
   Lock,
   FileSpreadsheet,
   PlayCircle,
-  Tag
+  Tag,
+  ChevronRight
 } from 'lucide-react';
 import { QualCampaign, QualFile } from './LeadQualification';
 import {
-  WizardHeader, WizardCard, WizardFooter, TopEmailsStep, ReviewConsentStep,
-  buildConsent, emailsComplete, cleanEmails, FieldLabel, inputCls, Chip
+  WizardHeader, WizardCard, CollapsibleCard, WizardFooter, TopEmailsStep, ReviewConsentStep,
+  buildConsent, emailsComplete, cleanEmails, hasInvalidEmails, FieldLabel, inputCls, Chip
 } from './campaign-builder/wizard';
 
 const STEPS = ['Basics', 'Audience file', 'Top 5 emails', 'Review & consent'];
@@ -419,7 +420,7 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
     if (!useCaseTag) return false;
     if (!businessLine) return false;
     if (!pendingFile || pendingFile.rowsAccepted <= 0) return false;
-    if (!emailsComplete(emails)) return false;
+    if (hasInvalidEmails(emails)) return false;
     if (!isBudgetCapValid) return false;
     return true;
   }, [campaignName, targetCIC, useCaseTag, businessLine, pendingFile, emails, isBudgetCapValid]);
@@ -495,7 +496,7 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-16 font-sans select-none" id="customer-insight-builder-container">
+    <div className="space-y-6 w-full pb-16 font-sans select-none" id="customer-insight-builder-container">
       
       {/* Processing Loading Screen */}
       {isProcessing ? (
@@ -543,16 +544,16 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
           />
 
           {isExistingCampaign && selectedCampaign && (
-            <div className="flex items-center justify-between gap-3">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f0f0f3] px-3 py-1 text-xs font-medium text-[#6e6e73]">
-                <Lock size={11} /> Locked Campaign
+            <div className="flex items-center justify-between gap-3 p-3 bg-neutral-50 border border-neutral-200 rounded-lg">
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-700">
+                <Lock size={12} className="text-neutral-500" /> Locked Campaign Parameters
               </span>
               <button
                 type="button"
                 onClick={() => onClone(selectedCampaign)}
-                className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#e8e8ed] px-5 text-sm font-medium text-[#1d1d1f] hover:bg-[#dcdce1]"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-white border border-neutral-200 px-3 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 shadow-xs cursor-pointer"
               >
-                <Copy size={13} /> Clone Campaign
+                <Copy size={12} /> Clone Campaign
               </button>
             </div>
           )}
@@ -560,11 +561,11 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
           {/* STEP 1: BASICS */}
           {step === 1 && (
             <WizardCard title="Basics" lead="Name your campaign, set the cost you are willing to pay per insight and choose what it is for.">
-              <div className="flex max-w-[640px] flex-col gap-7">
-                <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
                     <FieldLabel htmlFor="ci-name" required>Campaign name</FieldLabel>
-                    {isExistingCampaign && <span className="inline-flex items-center gap-1 text-xs text-[#86868b]"><Lock size={10} /> Fixed in existing campaign</span>}
+                    {isExistingCampaign && <span className="inline-flex items-center gap-1 text-[10px] text-neutral-400 font-mono"><Lock size={10} /> Locked</span>}
                   </div>
                   <input
                     id="ci-name"
@@ -575,66 +576,15 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                     placeholder="e.g. Zenith HNI Persona & Insight Mapping"
                     className={inputCls(touched.campaignName && !campaignName.trim())}
                   />
-                  {touched.campaignName && !campaignName.trim() && <p className="text-[13px] text-[#d70015]">Campaign name is required.</p>}
+                  {touched.campaignName && !campaignName.trim() && <p className="text-[11px] font-medium text-rose-500">Campaign name is required.</p>}
                 </div>
 
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <FieldLabel htmlFor="ci-target" required>Target CIC</FieldLabel>
-                    {isExistingCampaign && <span className="inline-flex items-center gap-1 text-xs text-[#86868b]"><Lock size={10} /> Fixed in existing campaign</span>}
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base text-[#6e6e73]">₹</span>
-                    <input
-                      id="ci-target"
-                      type="number"
-                      disabled={isExistingCampaign}
-                      value={targetCIC || ''}
-                      onChange={(e) => {
-                        const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                        setTargetCIC(val);
-                        setTouched(prev => ({ ...prev, targetCIC: true }));
-                      }}
-                      placeholder="15"
-                      className={`${inputCls(touched.targetCIC && (!targetCIC || targetCIC <= 0))} pl-9`}
-                    />
-                  </div>
-                  <p className="text-[13px] text-[#6e6e73]">Cost per Customer Insight. What you are willing to pay to profile one customer. Your last 30 days average: ₹15.</p>
-                  {touched.targetCIC && (!targetCIC || targetCIC <= 0) && <p className="text-[13px] text-[#d70015]">Target CIC must be greater than ₹0.</p>}
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <FieldLabel required>Use-case tag</FieldLabel>
-                    {isExistingCampaign && <span className="inline-flex items-center gap-1 text-xs text-[#86868b]"><Lock size={10} /> Fixed in existing campaign</span>}
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    {(['Engagement', 'Retention', 'General Insight'] as const).map((tag) => {
-                      const on = useCaseTag === tag;
-                      return (
-                        <button
-                          key={tag}
-                          type="button"
-                          aria-pressed={on}
-                          disabled={isExistingCampaign}
-                          onClick={() => { if (!isExistingCampaign) { setUseCaseTag(tag); setTouched(prev => ({ ...prev, useCaseTag: true })); } }}
-                          className={`flex h-16 items-center justify-center gap-2 rounded-[14px] border text-[15px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${on ? 'border-[#1d1d1f] bg-[#1d1d1f] text-white' : 'border-[#d2d2d7] bg-white text-[#1d1d1f] hover:border-[#86868b]'}`}
-                        >
-                          {on && <Check size={14} className="stroke-[3]" />}
-                          {tag}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="text-[13px] text-[#6e6e73]">Calibrates the persona and propensity scoring. Affects internal scoring only. Locked after the first run; clone the campaign to change it.</p>
-                </div>
-
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
                     <FieldLabel required>Business line</FieldLabel>
-                    {isExistingCampaign && <span className="inline-flex items-center gap-1 text-xs text-[#86868b]"><Lock size={10} /> Fixed in existing campaign</span>}
+                    {isExistingCampaign && <span className="inline-flex items-center gap-1 text-[10px] text-neutral-400 font-mono"><Lock size={10} /> Locked</span>}
                   </div>
-                  <div className="flex flex-wrap gap-2.5">
+                  <div className="flex flex-wrap gap-2">
                     {clientProfile.businessLines.map((line: string) => (
                       <Chip
                         key={line}
@@ -646,7 +596,62 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                       </Chip>
                     ))}
                   </div>
-                  {touched.businessLine && !businessLine && <p className="text-[13px] text-[#d70015]">Please select a business line.</p>}
+                  {touched.businessLine && !businessLine && <p className="text-[11px] font-medium text-rose-500">Please select a business line.</p>}
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <FieldLabel htmlFor="ci-target" required>Target CIC</FieldLabel>
+                    {isExistingCampaign && <span className="inline-flex items-center gap-1 text-[10px] text-neutral-400 font-mono"><Lock size={10} /> Locked</span>}
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-neutral-400 font-medium">₹</span>
+                    <input
+                      id="ci-target"
+                      type="number"
+                      disabled={isExistingCampaign}
+                      value={targetCIC || ''}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                        setTargetCIC(val);
+                        setTouched(prev => ({ ...prev, targetCIC: true }));
+                      }}
+                      placeholder="15"
+                      className={`${inputCls(touched.targetCIC && (!targetCIC || targetCIC <= 0))} pl-8`}
+                    />
+                  </div>
+                  <p className="text-[11px] text-neutral-400">Cost per Customer Insight (Target). Last 30d avg: ₹15.</p>
+                  {touched.targetCIC && (!targetCIC || targetCIC <= 0) && <p className="text-[11px] font-medium text-rose-500">Target CIC must be greater than ₹0.</p>}
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <FieldLabel required>Use-case tag</FieldLabel>
+                    {isExistingCampaign && <span className="inline-flex items-center gap-1 text-[10px] text-neutral-400 font-mono"><Lock size={10} /> Locked</span>}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['Engagement', 'Retention', 'General Insight'] as const).map((tag) => {
+                      const on = useCaseTag === tag;
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          aria-pressed={on}
+                          disabled={isExistingCampaign}
+                          onClick={() => { if (!isExistingCampaign) { setUseCaseTag(tag); setTouched(prev => ({ ...prev, useCaseTag: true })); } }}
+                          className={`h-10 px-2 rounded-lg border text-xs font-semibold transition-all flex items-center justify-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer ${
+                            on 
+                              ? 'border-neutral-900 bg-neutral-900 text-white shadow-xs' 
+                              : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 hover:border-neutral-300'
+                          }`}
+                        >
+                          {on && <Check size={12} className="stroke-[3]" />}
+                          <span className="truncate">{tag}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-neutral-400">Calibrates internal scoring and propensity model.</p>
                 </div>
               </div>
             </WizardCard>
@@ -655,7 +660,7 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
           {/* STEP 2: AUDIENCE FILE */}
           {step === 2 && (
             <>
-              <WizardCard title="Audience file" lead="Upload the customers you want profiled.">
+              <WizardCard title="Audience file" lead="Upload the customers you want profiled. Rows missing both email and phone are skipped individually.">
                 <div className="flex flex-col gap-3">
                   <FieldLabel required>Upload Audience File</FieldLabel>
                   <input type="file" ref={fileInputRef} accept=".csv,.xls,.xlsx" onChange={handleNativeFileUpload} className="hidden" />
@@ -665,29 +670,28 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                       onDragOver={handleDragOver}
                       onDrop={handleDrop}
                       onClick={() => fileInputRef.current?.click()}
-                      className="cursor-pointer rounded-[16px] border-2 border-dashed border-[#d2d2d7] bg-[#fafafc] p-10 text-center transition-colors hover:border-[#0071e3]"
+                      className="cursor-pointer rounded-xl border-2 border-dashed border-neutral-200 bg-neutral-50/50 p-8 text-center transition-colors hover:border-blue-500 hover:bg-blue-50/20"
                     >
-                      <UploadCloud size={28} className="mx-auto mb-3 text-[#0071e3]" />
-                      <h4 className="text-[15px] font-semibold text-[#1d1d1f]">Click or drag and drop your customer audience file</h4>
-                      <p className="mt-1 text-[13px] text-[#6e6e73]">CSV, XLS or XLSX, up to 25 MB</p>
-                      <p className="mt-3 text-[13px] text-[#6e6e73]">A row missing both email and phone is skipped on its own; the rest of the file is kept.</p>
+                      <UploadCloud size={24} className="mx-auto mb-2 text-blue-600" />
+                      <h4 className="text-xs font-bold text-neutral-800">Click or drag and drop your audience file</h4>
+                      <p className="mt-0.5 text-[11px] text-neutral-400">CSV, XLS or XLSX · up to 25 MB</p>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between rounded-[14px] bg-[#f5f5f7] px-5 py-4">
+                    <div className="flex items-center justify-between rounded-lg bg-neutral-50 border border-neutral-200/80 px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <FileSpreadsheet size={22} className="text-[#0071e3]" />
+                        <FileSpreadsheet size={20} className="text-blue-600" />
                         <div>
-                          <div className="text-[15px] font-medium text-[#1d1d1f]">{pendingFile.name}</div>
-                          <div className="text-[13px] text-[#6e6e73]">{pendingFile.size}</div>
+                          <div className="text-xs font-bold text-neutral-900">{pendingFile.name}</div>
+                          <div className="text-[11px] text-neutral-400 font-mono">{pendingFile.size}</div>
                         </div>
                       </div>
                       <button
                         type="button"
                         title="Replace file"
                         onClick={() => { setPendingFile(null); setHasRunSample(false); }}
-                        className="rounded-full p-2 text-[#6e6e73] hover:bg-[#e8e8ed] hover:text-[#1d1d1f]"
+                        className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-200/60 hover:text-neutral-700 transition-colors cursor-pointer"
                       >
-                        <X size={16} />
+                        <X size={14} />
                       </button>
                     </div>
                   )}
@@ -695,26 +699,26 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
 
                 {pendingFile && (
                   <div className="flex flex-col gap-3">
-                    <h4 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-[#6e6e73]">Validation</h4>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div className="rounded-[14px] bg-[#f5f5f7] p-5">
-                        <div className="text-[13px] text-[#6e6e73]">Accepted rows</div>
-                        <div className="mt-1 text-[28px] font-semibold tracking-tight text-[#1d1d1f]">{pendingFile.rowsAccepted.toLocaleString('en-IN')}</div>
-                        <div className="text-[13px] text-[#6e6e73]">Ready for customer insight profiling</div>
+                    <h4 className="text-[10px] font-mono font-semibold uppercase tracking-wider text-neutral-400">Validation Breakdown</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="rounded-lg bg-neutral-50 border border-neutral-200/70 p-4">
+                        <div className="text-[11px] text-neutral-500 font-medium">Accepted rows</div>
+                        <div className="mt-1 text-2xl font-bold tracking-tight text-neutral-900">{pendingFile.rowsAccepted.toLocaleString('en-IN')}</div>
+                        <div className="text-[11px] text-emerald-600 font-medium mt-0.5">Ready for profiling</div>
                       </div>
-                      <div className="rounded-[14px] bg-[#f5f5f7] p-5">
-                        <div className="text-[13px] text-[#6e6e73]">Skipped rows</div>
-                        <div className="mt-1 text-[28px] font-semibold tracking-tight text-[#1d1d1f]">{pendingFile.rowsSkipped.toLocaleString('en-IN')}</div>
-                        <div className="text-[13px] text-[#6e6e73]">Not charged</div>
+                      <div className="rounded-lg bg-neutral-50 border border-neutral-200/70 p-4">
+                        <div className="text-[11px] text-neutral-500 font-medium">Skipped rows</div>
+                        <div className="mt-1 text-2xl font-bold tracking-tight text-neutral-900">{pendingFile.rowsSkipped.toLocaleString('en-IN')}</div>
+                        <div className="text-[11px] text-neutral-400 font-medium mt-0.5">Not charged</div>
                       </div>
                     </div>
-                    <div className="rounded-[14px] border border-[#e5e5ea] p-5">
-                      <h5 className="mb-2 text-sm font-semibold text-[#1d1d1f]">Why rows were skipped</h5>
+                    <div className="rounded-lg border border-neutral-200/70 p-4 bg-white">
+                      <h5 className="mb-2 text-xs font-bold text-neutral-800">Why rows were skipped</h5>
                       <div className="flex flex-col gap-1.5">
                         {pendingFile.skipReasons.map((reason, idx) => (
-                          <div key={idx} className="flex items-start justify-between gap-4 text-[14px] text-[#6e6e73]">
+                          <div key={idx} className="flex items-center justify-between text-xs text-neutral-600">
                             <span>{reason.reason}</span>
-                            <span className="flex-none font-medium text-[#1d1d1f]">{reason.count}</span>
+                            <span className="font-mono font-semibold text-neutral-900">{reason.count}</span>
                           </div>
                         ))}
                       </div>
@@ -725,52 +729,53 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
 
               {pendingFile && (
                 <>
-                  <WizardCard title="Scoring sample">
-                    <div className="-mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="max-w-[520px] space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-[#f0f0f3] px-2.5 py-[3px] text-xs font-medium text-[#6e6e73]">Optional · free</span>
+                  <WizardCard title="Scoring Sample" badge="Optional · Free">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs font-bold text-neutral-900">Run a quick 5-lead sanity check</h4>
                           {hasRunSample && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-[#e8f5ec] px-2.5 py-[3px] text-xs font-medium text-[#1d7a3a]">
-                              <Check size={11} className="stroke-[3]" /> Sample completed
+                            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                              <Check size={10} /> Sample Completed
                             </span>
                           )}
                         </div>
-                        <p className="text-[15px] leading-relaxed text-[#6e6e73]">A free test pass on 5 real prospects. It works out your real cost per insight and shows a persona preview before you commit.</p>
-                        <p className="text-[13px] text-[#86868b]">Does not charge your account balance. You can run the campaign without it.</p>
+                        <p className="text-xs text-neutral-500 leading-relaxed max-w-xl">
+                          Calculates real cost per insight and shows persona distribution before committing budget.
+                        </p>
                       </div>
                       <button
                         type="button"
                         onClick={handleOpenSampleModal}
-                        className="inline-flex h-12 flex-none items-center justify-center gap-2 rounded-full bg-[#1d1d1f] px-7 text-base font-medium text-white hover:bg-black"
+                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-neutral-900 px-4 text-xs font-semibold text-white hover:bg-black transition-all shadow-xs cursor-pointer shrink-0"
                       >
-                        <PlayCircle size={16} />
-                        {hasRunSample ? 'Re-run sample scoring' : 'Run scoring sample'}
+                        <PlayCircle size={14} />
+                        <span>{hasRunSample ? 'Re-run Sample' : 'Run Scoring Sample'}</span>
                       </button>
                     </div>
                   </WizardCard>
 
-                  <WizardCard title="Cost & target check">
-                    <div className="-mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                      <div className="rounded-[14px] bg-[#f5f5f7] p-5">
-                        <div className="text-[13px] text-[#6e6e73]">Cost estimate (this file)</div>
-                        <div className="mt-1 text-[26px] font-semibold tracking-tight text-[#1d1d1f]">₹{effectiveFileCost.toLocaleString('en-IN')}</div>
-                        <div className="text-[13px] text-[#6e6e73]">{hasRunSample ? 'Based on sample' : 'Flat rate until a sample is run'}</div>
+                  <WizardCard title="Cost & Target Check">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="rounded-lg bg-neutral-50 border border-neutral-200/70 p-4">
+                        <div className="text-[11px] text-neutral-500 font-medium">Cost estimate (this file)</div>
+                        <div className="mt-1 text-2xl font-bold tracking-tight text-neutral-900">₹{effectiveFileCost.toLocaleString('en-IN')}</div>
+                        <div className="text-[11px] text-neutral-400 mt-0.5">{hasRunSample ? 'Based on sample' : 'Flat rate estimate'}</div>
                       </div>
-                      <div className="rounded-[14px] bg-[#f5f5f7] p-5">
-                        <div className="text-[13px] text-[#6e6e73]">Running total spend</div>
-                        <div className="mt-1 text-[26px] font-semibold tracking-tight text-[#1d1d1f]">₹{runningTotalSpend.toLocaleString('en-IN')}</div>
-                        <div className="text-[13px] text-[#6e6e73]">{isExistingCampaign ? 'Cumulative' : 'Initial file'}</div>
+                      <div className="rounded-lg bg-neutral-50 border border-neutral-200/70 p-4">
+                        <div className="text-[11px] text-neutral-500 font-medium">Running total spend</div>
+                        <div className="mt-1 text-2xl font-bold tracking-tight text-neutral-900">₹{runningTotalSpend.toLocaleString('en-IN')}</div>
+                        <div className="text-[11px] text-neutral-400 mt-0.5">{isExistingCampaign ? 'Cumulative' : 'Initial file'}</div>
                       </div>
-                      <div className="rounded-[14px] bg-[#f5f5f7] p-5">
-                        <div className="text-[13px] text-[#6e6e73]">Est. CIC vs target</div>
+                      <div className="rounded-lg bg-neutral-50 border border-neutral-200/70 p-4">
+                        <div className="text-[11px] text-neutral-500 font-medium">Est. CIC vs target</div>
                         <div className="mt-1 flex items-baseline gap-2">
-                          <span className="text-[26px] font-semibold tracking-tight text-[#1d1d1f]">₹{estCIC}</span>
-                          <span className="text-[13px] text-[#6e6e73]">Target ₹{targetCIC}</span>
+                          <span className="text-2xl font-bold tracking-tight text-neutral-900">₹{estCIC}</span>
+                          <span className="text-xs text-neutral-400">Target ₹{targetCIC}</span>
                         </div>
-                        <div className={`inline-flex items-center gap-1 text-[13px] font-medium ${isWithinTarget ? 'text-[#1d7a3a]' : 'text-[#b25000]'}`}>
+                        <div className={`inline-flex items-center gap-1 text-xs font-semibold mt-0.5 ${isWithinTarget ? 'text-emerald-600' : 'text-amber-600'}`}>
                           {isWithinTarget ? <Check size={12} className="stroke-[3]" /> : <AlertTriangle size={12} />}
-                          {isWithinTarget ? 'Within target' : 'Above target'}{hasRunSample ? ' · based on sample' : ''}
+                          {isWithinTarget ? 'Within target' : 'Above target'}{hasRunSample ? ' · sample verified' : ''}
                         </div>
                       </div>
                     </div>
@@ -778,16 +783,12 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                 </>
               )}
 
-              <WizardCard>
-                <div className="flex items-center gap-2.5">
-                  <h3 className="text-[22px] font-semibold tracking-[-0.01em] text-[#1d1d1f]">More options</h3>
-                  <span className="rounded-full bg-[#f0f0f3] px-2.5 py-[3px] text-xs font-medium text-[#6e6e73]">Optional</span>
-                </div>
-                <div className="flex max-w-[640px] flex-col gap-6">
-                  <div className="flex flex-col gap-2">
+              <CollapsibleCard title="More Options" badge="Optional" isOpen={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="flex flex-col gap-1.5">
                     <FieldLabel htmlFor="ci-cap">Total budget cap (₹)</FieldLabel>
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base text-[#6e6e73]">₹</span>
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-neutral-400 font-medium">₹</span>
                       <input
                         id="ci-cap"
                         type="number"
@@ -800,27 +801,24 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                           setTouched(prev => ({ ...prev, budgetCap: true }));
                         }}
                         placeholder="e.g. 50000"
-                        className={`${inputCls(touched.budgetCap && totalBudgetCap !== '' && Number(totalBudgetCap) <= 0)} pl-9`}
+                        className={`${inputCls(touched.budgetCap && totalBudgetCap !== '' && Number(totalBudgetCap) <= 0)} pl-8`}
                       />
                     </div>
-                    <p className="text-[13px] text-[#6e6e73]">A hard spend ceiling. The campaign stops once it is reached, however many files are added later.</p>
-                    {touched.budgetCap && totalBudgetCap !== '' && Number(totalBudgetCap) <= 0 && (
-                      <p className="text-[13px] text-[#d70015]">Total budget cap must be greater than ₹0.</p>
-                    )}
+                    <p className="text-[11px] text-neutral-400">Hard spend ceiling for automated pausing.</p>
                   </div>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-1.5">
                     <FieldLabel htmlFor="ci-notes">Internal notes / objective</FieldLabel>
                     <textarea
                       id="ci-notes"
-                      rows={3}
+                      rows={2}
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Record internal notes, campaign objective, or team attribution..."
-                      className="w-full rounded-xl border border-[#d2d2d7] bg-white px-4 py-3 text-base text-[#1d1d1f] outline-none focus:border-[#0071e3]"
+                      placeholder="Record internal campaign objectives, targeting rationale..."
+                      className="w-full rounded-lg border border-neutral-200 bg-white px-3.5 py-2 text-xs text-neutral-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-neutral-400"
                     />
                   </div>
                 </div>
-              </WizardCard>
+              </CollapsibleCard>
             </>
           )}
 
@@ -861,30 +859,46 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                   ['Emails', `${Math.min(cleanEmails(emails).length, 5)} of 5 added`],
                 ] },
               ]}
+              walletCost={{
+                currentBalance: 950000,
+                campaignCost: effectiveFileCost,
+                costLabel: 'Insight Cohort Cost',
+                costSubtext: `${pendingFile ? pendingFile.rowsAccepted.toLocaleString('en-IN') : 0} customer profiles · ~₹${estCIC || 15}/profile insight fee`,
+                unitRateLabel: 'Est. CIC',
+                unitRateValue: `Est. CIC: ₹${estCIC || targetCIC || 15}`,
+                pacingNote: `${hasRunSample ? 'Sample Verified Rate (₹' + sampleActualPerRowCost.toFixed(2) + '/rec)' : 'Standard Propensity Profiling'}`
+              }}
             />
           )}
 
           {/* FOOTER */}
           {step === 4 && isExistingCampaign && selectedCampaign ? (
-            <div className="mt-2 flex items-center justify-between">
-              <button type="button" onClick={() => setStep(3)} className="px-2 text-base font-medium text-[#0071e3] hover:opacity-80">Back</button>
+            <div className="flex items-center justify-between pt-4 border-t border-neutral-200/70 mt-4">
+              <button 
+                type="button" 
+                onClick={() => setStep(3)} 
+                className="text-xs font-semibold text-neutral-600 hover:text-neutral-900 px-3 py-2 rounded-lg hover:bg-neutral-100 transition-colors cursor-pointer"
+              >
+                Back
+              </button>
               <div className="flex items-center gap-3">
-                <span className="text-[13px] text-[#6e6e73]">Step 4 of 4</span>
+                <span className="text-[11px] font-mono text-neutral-400 font-medium">Step 4 of 4</span>
                 <button
                   type="button"
                   onClick={() => onClone(selectedCampaign)}
-                  className="inline-flex h-12 items-center gap-1.5 rounded-full bg-[#e8e8ed] px-7 text-base font-medium text-[#1d1d1f]"
+                  className="h-9 sm:h-10 px-4 text-xs font-semibold bg-white hover:bg-neutral-50 text-neutral-700 border border-neutral-200 rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Copy size={14} /> Clone campaign
+                  <Copy size={13} /> Clone campaign
                 </button>
                 <button
                   type="button"
                   id="run_customer_insight_campaign_btn"
                   onClick={handleRunClick}
                   disabled={!canRun}
-                  className="h-12 rounded-full bg-[#0071e3] px-7 text-base font-medium text-white transition-colors hover:bg-[#0077ed] disabled:cursor-not-allowed disabled:bg-[#b9d7f7]"
+                  className="h-9 sm:h-10 px-5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-98"
                 >
-                  Run customer insight
+                  <span>Run customer insight</span>
+                  <ChevronRight size={14} />
                 </button>
               </div>
             </div>
@@ -892,9 +906,12 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
             <WizardFooter
               step={step}
               onBack={() => (step === 1 ? onCancel() : setStep(step - 1))}
-              onNext={step === 4 ? handleRunClick : () => setStep(step + 1)}
+              onNext={step === 4 ? handleRunClick : () => {
+                if (step === 3 && hasInvalidEmails(emails)) return;
+                setStep(step + 1);
+              }}
               nextLabel={step === 4 ? 'Run customer insight' : 'Continue'}
-              nextDisabled={step === 1 ? !step1Valid : step === 2 ? !step2Valid : step === 3 ? !emailsComplete(emails) : !canRun}
+              nextDisabled={step === 1 ? !step1Valid : step === 2 ? !step2Valid : step === 3 ? hasInvalidEmails(emails) : !canRun}
             />
           )}
         </>
