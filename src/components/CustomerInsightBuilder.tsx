@@ -8,27 +8,21 @@ import {
   Check, 
   AlertTriangle,
   Info,
-  DollarSign,
   Activity,
-  UserCheck,
-  Clock,
   X,
   Sparkles,
   Lock,
-  Building2,
-  SlidersHorizontal,
-  ChevronDown,
-  ChevronUp,
   FileSpreadsheet,
-  CheckCircle2,
   PlayCircle,
-  Eye,
-  Layers,
-  Award,
-  TrendingUp,
   Tag
 } from 'lucide-react';
 import { QualCampaign, QualFile } from './LeadQualification';
+import {
+  WizardHeader, WizardCard, WizardFooter, TopEmailsStep, ReviewConsentStep,
+  buildConsent, emailsComplete, cleanEmails, FieldLabel, inputCls, Chip
+} from './campaign-builder/wizard';
+
+const STEPS = ['Basics', 'Audience file', 'Top 5 emails', 'Review & consent'];
 
 interface CustomerInsightBuilderProps {
   selectedCampaign: QualCampaign | null;
@@ -256,7 +250,9 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
   const [sampleActualPerRowCost] = useState<number>(11.40); // Empirical per-row cost from 5 samples
   const [sampleHighConfidenceCost] = useState<number>(19.00); // 3 of 5 are High Confidence => (5 * 11.40)/3 = ₹19.00
 
-  const [consentConfirmed, setConsentConfirmed] = useState<boolean>(false);
+  const [step, setStep] = useState<number>(1);
+  const [emails, setEmails] = useState<string[]>(['', '', '', '', '']);
+  const [acks, setAcks] = useState<boolean[]>([false, false, false, false]);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   // Full processing simulation state
@@ -285,8 +281,14 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
     }
     setPendingFile(null);
     setHasRunSample(false);
-    setConsentConfirmed(false);
+    setStep(1);
+    setEmails(['', '', '', '', '']);
+    setAcks([false, false, false, false]);
   }, [selectedCampaign, clientProfile]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [step]);
 
   // Format currency helper
   const formatTicketSize = (amt: number) => {
@@ -417,10 +419,14 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
     if (!useCaseTag) return false;
     if (!businessLine) return false;
     if (!pendingFile || pendingFile.rowsAccepted <= 0) return false;
-    if (!consentConfirmed) return false;
+    if (!emailsComplete(emails)) return false;
     if (!isBudgetCapValid) return false;
     return true;
-  }, [campaignName, targetCIC, useCaseTag, businessLine, pendingFile, consentConfirmed, isBudgetCapValid]);
+  }, [campaignName, targetCIC, useCaseTag, businessLine, pendingFile, emails, isBudgetCapValid]);
+
+  const step1Valid = Boolean(campaignName.trim()) && targetCIC > 0 && Boolean(useCaseTag) && Boolean(businessLine);
+  const step2Valid = Boolean(pendingFile && pendingFile.rowsAccepted > 0) && isBudgetCapValid;
+  const canRun = acks.every(Boolean) && isFormValid;
 
   // Run full file execution
   const handleRunClick = () => {
@@ -430,7 +436,6 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
       useCaseTag: true,
       businessLine: true,
       file: true,
-      consent: true,
       budgetCap: true
     });
 
@@ -461,6 +466,8 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
         clearInterval(interval);
         setTimeout(() => {
           onRun({
+            topEmails: cleanEmails(emails),
+            consent: buildConsent('insight'),
             name: campaignName.trim(),
             useCaseTag: useCaseTag,
             industry: clientProfile.industry,
@@ -522,529 +529,267 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
         </div>
       ) : (
         <>
-          {/* Header Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-neutral-200/80 pb-4">
-            <div className="flex items-center gap-3">
-              <button 
-                type="button"
-                onClick={onCancel}
-                className="p-2 hover:bg-neutral-100 rounded-lg text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
-                title="Back to Customer Insight Management"
-              >
-                <ArrowLeft size={16} />
-              </button>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-extrabold text-neutral-900 tracking-tight">
-                    {isExistingCampaign ? `Manage Campaign: ${selectedCampaign?.name}` : "Create Customer Insight Campaign"}
-                  </h2>
-                  {isExistingCampaign && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded border border-neutral-200">
-                      <Lock size={10} /> Locked Campaign
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-neutral-500 mt-0.5">
-                  {isExistingCampaign 
-                    ? "Upload another audience file under this campaign's fixed Target CIC, Use-case and Business line." 
-                    : "Target-first customer intelligence setup powered by your verified client profile."}
-                </p>
-              </div>
-            </div>
+          <WizardHeader
+            section="Customer Insight"
+            title={isExistingCampaign ? `Manage Campaign: ${selectedCampaign?.name}` : 'Create Customer Insight Campaign'}
+            subtitle={isExistingCampaign
+              ? "Upload another audience file under this campaign's fixed Target CIC, Use-case and Business line."
+              : 'Target-first customer intelligence setup powered by your verified client profile.'}
+            client={clientProfile}
+            steps={STEPS}
+            step={step}
+            onCancel={onCancel}
+            onJump={(n) => setStep(n)}
+          />
 
-            {isExistingCampaign && selectedCampaign && (
+          {isExistingCampaign && selectedCampaign && (
+            <div className="flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f0f0f3] px-3 py-1 text-xs font-medium text-[#6e6e73]">
+                <Lock size={11} /> Locked Campaign
+              </span>
               <button
                 type="button"
                 onClick={() => onClone(selectedCampaign)}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-700 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-2xs self-start sm:self-auto active:scale-98"
+                className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#e8e8ed] px-5 text-sm font-medium text-[#1d1d1f] hover:bg-[#dcdce1]"
               >
-                <Copy size={13} className="text-neutral-500" />
-                <span>Clone Campaign</span>
+                <Copy size={13} /> Clone Campaign
               </button>
-            )}
-          </div>
-
-          {/* 1. Client Profile Strip (Read-only) */}
-          <div className="bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 text-white rounded-xl p-4 shadow-sm border border-neutral-700/60 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0">
-                <Building2 size={18} />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold tracking-wide text-neutral-200 truncate">{clientProfile.name}</span>
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-neutral-400 bg-white/10 px-2 py-0.5 rounded">
-                    <Lock size={10} className="text-neutral-400" /> Read-only
-                  </span>
-                </div>
-                <div className="text-xs text-neutral-300 font-medium flex items-center gap-2 mt-0.5 flex-wrap">
-                  <span><strong className="text-white font-bold">{clientProfile.industry}</strong></span>
-                  <span className="text-neutral-500">•</span>
-                  <span>Ticket size: <strong className="text-white font-bold">{formatTicketSize(clientProfile.ticketSize)}</strong></span>
-                  <span className="text-neutral-500">•</span>
-                  <span>Purchase channel: <strong className="text-white font-bold">{clientProfile.purchaseChannel}</strong></span>
-                </div>
-              </div>
             </div>
-            <div className="flex items-center gap-2 pt-1 md:pt-0 border-t md:border-t-0 border-neutral-700/60 shrink-0">
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-blue-400 bg-blue-500/10 border border-blue-400/25 px-2.5 py-1 rounded-md">
-                <span>Managed in Client Onboarding</span>
-              </span>
-            </div>
-          </div>
+          )}
 
-          {/* Main Campaign Form Card */}
-          <div className="bg-white border border-neutral-200/80 rounded-2xl p-6 sm:p-7 shadow-sm space-y-7">
-            
-            {/* 2. Campaign Name */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
-                  <span>Campaign name</span> <span className="text-red-500 ml-1">*</span>
-                  <InfoTooltip content="Descriptive identifier for this customer insight campaign in tracking tables and reports." />
-                </label>
-                {isExistingCampaign && (
-                  <span className="text-[10px] font-semibold text-neutral-400 flex items-center gap-1">
-                    <Lock size={10} /> Fixed in existing campaign
-                  </span>
-                )}
-              </div>
-              
-              <input 
-                type="text" 
-                value={campaignName}
-                disabled={isExistingCampaign}
-                onChange={(e) => {
-                  setCampaignName(e.target.value);
-                  setTouched(prev => ({ ...prev, campaignName: true }));
-                }}
-                placeholder="e.g. Zenith HNI Persona & Insight Mapping"
-                className={`w-full px-4 py-2.5 text-xs ${
-                  isExistingCampaign 
-                    ? 'bg-neutral-100/80 text-neutral-600 cursor-not-allowed border-neutral-200 font-bold' 
-                    : 'bg-neutral-50/70 focus:bg-white text-neutral-900 border-neutral-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
-                } border rounded-xl font-semibold focus:outline-none transition-all`}
-              />
-              {touched.campaignName && !campaignName.trim() && (
-                <p className="text-[11px] text-red-500 font-bold mt-1.5 flex items-center gap-1">
-                  <AlertTriangle size={12} /> Campaign name is required.
-                </p>
-              )}
-            </div>
-
-            {/* 3. Target CIC (Large currency input placed first after name) */}
-            <div className="bg-blue-50/40 border border-blue-200/60 rounded-xl p-5 space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
-                  <span>Target CIC</span> <span className="text-red-500 ml-1">*</span>
-                  <InfoTooltip content="Cost per Customer Insight target benchmark. Matches the Target CIC column on Dashboard v2." />
-                </label>
-                {isExistingCampaign && (
-                  <span className="text-[10px] font-semibold text-neutral-500 flex items-center gap-1">
-                    <Lock size={10} /> Fixed in existing campaign
-                  </span>
-                )}
-              </div>
-
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 font-extrabold text-lg">₹</span>
-                <input 
-                  type="number" 
-                  disabled={isExistingCampaign}
-                  value={targetCIC || ''}
-                  onChange={(e) => {
-                    const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                    setTargetCIC(val);
-                    setTouched(prev => ({ ...prev, targetCIC: true }));
-                  }}
-                  placeholder="15"
-                  className={`w-full pl-9 pr-4 py-3 text-lg font-bold ${
-                    isExistingCampaign 
-                      ? 'bg-neutral-100/80 text-neutral-700 cursor-not-allowed border-neutral-200' 
-                      : 'bg-white text-neutral-900 border-blue-300/80 focus:border-blue-600 focus:ring-3 focus:ring-blue-500/20'
-                  } border rounded-xl focus:outline-none transition-all`}
-                />
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[11px] pt-1">
-                <p className="text-neutral-500 font-medium">
-                  What you're willing to pay to profile one customer.
-                </p>
-                <p className="text-neutral-600 font-semibold flex items-center gap-1">
-                  <span>Your last 30 days avg:</span>
-                  <span className="inline-flex items-center text-neutral-900 font-bold bg-white px-2 py-0.5 rounded border border-neutral-200 shadow-2xs">
-                    ₹15
-                  </span>
-                </p>
-              </div>
-
-              {touched.targetCIC && (!targetCIC || targetCIC <= 0) && (
-                <p className="text-[11px] text-red-500 font-bold flex items-center gap-1">
-                  <AlertTriangle size={12} /> Target CIC must be greater than ₹0.
-                </p>
-              )}
-            </div>
-
-            {/* 4. Use-case tag (Engagement / Retention / General Insight) */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
-                  <span>Use-case tag</span> <span className="text-red-500 ml-1">*</span>
-                  <InfoTooltip content="Calibrates the psychographic and propensity scoring weight distribution." />
-                </label>
-                {isExistingCampaign && (
-                  <span className="text-[10px] font-semibold text-neutral-400 flex items-center gap-1">
-                    <Lock size={10} /> Fixed in existing campaign
-                  </span>
-                )}
-              </div>
-
-              <div className="grid grid-cols-3 gap-2.5">
-                {(['Engagement', 'Retention', 'General Insight'] as const).map((tag) => {
-                  const isSelected = useCaseTag === tag;
-                  return (
-                    <button
-                      key={tag}
-                      type="button"
-                      disabled={isExistingCampaign}
-                      onClick={() => {
-                        if (!isExistingCampaign) {
-                          setUseCaseTag(tag);
-                          setTouched(prev => ({ ...prev, useCaseTag: true }));
-                        }
-                      }}
-                      className={`px-3.5 py-2.5 text-xs font-bold rounded-xl border transition-all text-center flex items-center justify-center gap-1.5 ${
-                        isExistingCampaign
-                          ? isSelected
-                            ? 'bg-neutral-800 text-white border-neutral-800 opacity-90 cursor-not-allowed'
-                            : 'bg-neutral-50 text-neutral-400 border-neutral-200 opacity-60 cursor-not-allowed'
-                          : isSelected
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-xs cursor-pointer'
-                            : 'bg-neutral-50/70 text-neutral-700 border-neutral-200 hover:bg-neutral-100 hover:text-neutral-900 cursor-pointer'
-                      }`}
-                    >
-                      {isSelected && <Check size={13} className="shrink-0 stroke-[3]" />}
-                      <span>{tag}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-[11px] text-neutral-400 font-medium mt-1.5">
-                Affects internal scoring only. Locked after first Run; clone to change.
-              </p>
-            </div>
-
-            {/* 5. Business Line (Single-select scoped to client profile) */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
-                  <span>Business line</span> <span className="text-red-500 ml-1">*</span>
-                  <InfoTooltip content="Scoped to your onboarded business lines. Replaces the generic business context form." />
-                </label>
-                {isExistingCampaign && (
-                  <span className="text-[10px] font-semibold text-neutral-400 flex items-center gap-1">
-                    <Lock size={10} /> Fixed in existing campaign
-                  </span>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {clientProfile.businessLines.map((line) => {
-                  const isSelected = businessLine === line;
-                  return (
-                    <button
-                      key={line}
-                      type="button"
-                      disabled={isExistingCampaign}
-                      onClick={() => {
-                        if (!isExistingCampaign) {
-                          setBusinessLine(line);
-                          setTouched(prev => ({ ...prev, businessLine: true }));
-                        }
-                      }}
-                      className={`px-3.5 py-2.5 text-xs font-bold rounded-xl border transition-all text-center flex items-center justify-center gap-1.5 ${
-                        isExistingCampaign
-                          ? isSelected
-                            ? 'bg-neutral-800 text-white border-neutral-800 opacity-90 cursor-not-allowed'
-                            : 'bg-neutral-50 text-neutral-400 border-neutral-200 opacity-60 cursor-not-allowed'
-                          : isSelected
-                            ? 'bg-neutral-900 text-white border-neutral-900 shadow-xs cursor-pointer'
-                            : 'bg-neutral-50/70 text-neutral-700 border-neutral-200 hover:bg-neutral-100 hover:text-neutral-900 cursor-pointer'
-                      }`}
-                    >
-                      {isSelected && <Check size={13} className="shrink-0 stroke-[3]" />}
-                      <span>{line}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {touched.businessLine && !businessLine && (
-                <p className="text-[11px] text-red-500 font-bold mt-1.5 flex items-center gap-1">
-                  <AlertTriangle size={12} /> Please select a business line.
-                </p>
-              )}
-            </div>
-
-            {/* 6. File Upload (.csv / .xls / .xlsx) */}
-            <div className="space-y-3">
-              <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
-                <span>Upload Audience File</span> <span className="text-red-500 ml-1">*</span>
-                <InfoTooltip content="Accepts .csv, .xls, and .xlsx files up to 25 MB. Rows missing both phone and email are skipped individually." />
-              </label>
-
-              {/* Hidden file input */}
-              <input 
-                type="file"
-                ref={fileInputRef}
-                accept=".csv,.xls,.xlsx"
-                onChange={handleNativeFileUpload}
-                className="hidden"
-              />
-
-              {!pendingFile ? (
-                <div
-                  onDragOver={handleDragOver}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-neutral-300 hover:border-blue-500 bg-neutral-50/60 hover:bg-blue-50/20 rounded-2xl p-8 text-center cursor-pointer transition-all"
-                >
-                  <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-2xs text-neutral-500 border border-neutral-200">
-                    <UploadCloud size={24} className="text-blue-600" />
-                  </div>
-                  <h4 className="text-xs font-bold text-neutral-900">Click or drag & drop customer audience file</h4>
-                  <p className="text-[11px] text-neutral-500 mt-1">
-                    Accepts <strong>.csv</strong>, <strong>.xls</strong>, or <strong>.xlsx</strong> files (Up to 25 MB)
-                  </p>
-                  <span className="inline-block mt-3 text-[10px] font-semibold text-neutral-500 bg-neutral-100 px-3 py-1 rounded-md border border-neutral-200">
-                    A row missing both email and phone is skipped on its own; the rest of the file is kept
-                  </span>
-                </div>
-              ) : (
-                <div className="border border-neutral-200 rounded-2xl p-5 bg-neutral-50/40 space-y-4">
-                  {/* File preview header */}
+          {/* STEP 1: BASICS */}
+          {step === 1 && (
+            <WizardCard title="Basics" lead="Name your campaign, set the cost you are willing to pay per insight and choose what it is for.">
+              <div className="flex max-w-[640px] flex-col gap-7">
+                <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2.5 bg-blue-100 text-blue-700 rounded-xl">
-                        <FileSpreadsheet size={20} />
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-bold text-neutral-900">{pendingFile.name}</h4>
-                        <p className="text-[10.5px] text-neutral-500 font-mono mt-0.5">{pendingFile.size}</p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPendingFile(null);
-                        setHasRunSample(false);
-                      }}
-                      className="p-1.5 hover:bg-neutral-200 text-neutral-400 hover:text-neutral-700 rounded-lg transition-colors cursor-pointer"
-                      title="Replace file"
-                    >
-                      <X size={16} />
-                    </button>
+                    <FieldLabel htmlFor="ci-name" required>Campaign name</FieldLabel>
+                    {isExistingCampaign && <span className="inline-flex items-center gap-1 text-xs text-[#86868b]"><Lock size={10} /> Fixed in existing campaign</span>}
                   </div>
+                  <input
+                    id="ci-name"
+                    type="text"
+                    value={campaignName}
+                    disabled={isExistingCampaign}
+                    onChange={(e) => { setCampaignName(e.target.value); setTouched(prev => ({ ...prev, campaignName: true })); }}
+                    placeholder="e.g. Zenith HNI Persona & Insight Mapping"
+                    className={inputCls(touched.campaignName && !campaignName.trim())}
+                  />
+                  {touched.campaignName && !campaignName.trim() && <p className="text-[13px] text-[#d70015]">Campaign name is required.</p>}
+                </div>
 
-                  {/* Validation Summary */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
-                          Accepted Rows
-                        </span>
-                        <CheckCircle2 size={15} className="text-emerald-600" />
-                      </div>
-                      <div className="text-xl font-black text-emerald-950 mt-1">
-                        {pendingFile.rowsAccepted.toLocaleString('en-IN')}
-                      </div>
-                      <p className="text-[10.5px] text-emerald-700 font-medium mt-0.5">
-                        Ready for customer insight profiling
-                      </p>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <FieldLabel htmlFor="ci-target" required>Target CIC</FieldLabel>
+                    {isExistingCampaign && <span className="inline-flex items-center gap-1 text-xs text-[#86868b]"><Lock size={10} /> Fixed in existing campaign</span>}
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base text-[#6e6e73]">₹</span>
+                    <input
+                      id="ci-target"
+                      type="number"
+                      disabled={isExistingCampaign}
+                      value={targetCIC || ''}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                        setTargetCIC(val);
+                        setTouched(prev => ({ ...prev, targetCIC: true }));
+                      }}
+                      placeholder="15"
+                      className={`${inputCls(touched.targetCIC && (!targetCIC || targetCIC <= 0))} pl-9`}
+                    />
+                  </div>
+                  <p className="text-[13px] text-[#6e6e73]">Cost per Customer Insight. What you are willing to pay to profile one customer. Your last 30 days average: ₹15.</p>
+                  {touched.targetCIC && (!targetCIC || targetCIC <= 0) && <p className="text-[13px] text-[#d70015]">Target CIC must be greater than ₹0.</p>}
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <FieldLabel required>Use-case tag</FieldLabel>
+                    {isExistingCampaign && <span className="inline-flex items-center gap-1 text-xs text-[#86868b]"><Lock size={10} /> Fixed in existing campaign</span>}
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    {(['Engagement', 'Retention', 'General Insight'] as const).map((tag) => {
+                      const on = useCaseTag === tag;
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          aria-pressed={on}
+                          disabled={isExistingCampaign}
+                          onClick={() => { if (!isExistingCampaign) { setUseCaseTag(tag); setTouched(prev => ({ ...prev, useCaseTag: true })); } }}
+                          className={`flex h-16 items-center justify-center gap-2 rounded-[14px] border text-[15px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${on ? 'border-[#1d1d1f] bg-[#1d1d1f] text-white' : 'border-[#d2d2d7] bg-white text-[#1d1d1f] hover:border-[#86868b]'}`}
+                        >
+                          {on && <Check size={14} className="stroke-[3]" />}
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[13px] text-[#6e6e73]">Calibrates the persona and propensity scoring. Affects internal scoring only. Locked after the first run; clone the campaign to change it.</p>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <FieldLabel required>Business line</FieldLabel>
+                    {isExistingCampaign && <span className="inline-flex items-center gap-1 text-xs text-[#86868b]"><Lock size={10} /> Fixed in existing campaign</span>}
+                  </div>
+                  <div className="flex flex-wrap gap-2.5">
+                    {clientProfile.businessLines.map((line: string) => (
+                      <Chip
+                        key={line}
+                        on={businessLine === line}
+                        disabled={isExistingCampaign}
+                        onClick={() => { if (!isExistingCampaign) { setBusinessLine(line); setTouched(prev => ({ ...prev, businessLine: true })); } }}
+                      >
+                        {line}
+                      </Chip>
+                    ))}
+                  </div>
+                  {touched.businessLine && !businessLine && <p className="text-[13px] text-[#d70015]">Please select a business line.</p>}
+                </div>
+              </div>
+            </WizardCard>
+          )}
+
+          {/* STEP 2: AUDIENCE FILE */}
+          {step === 2 && (
+            <>
+              <WizardCard title="Audience file" lead="Upload the customers you want profiled.">
+                <div className="flex flex-col gap-3">
+                  <FieldLabel required>Upload Audience File</FieldLabel>
+                  <input type="file" ref={fileInputRef} accept=".csv,.xls,.xlsx" onChange={handleNativeFileUpload} className="hidden" />
+
+                  {!pendingFile ? (
+                    <div
+                      onDragOver={handleDragOver}
+                      onDrop={handleDrop}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="cursor-pointer rounded-[16px] border-2 border-dashed border-[#d2d2d7] bg-[#fafafc] p-10 text-center transition-colors hover:border-[#0071e3]"
+                    >
+                      <UploadCloud size={28} className="mx-auto mb-3 text-[#0071e3]" />
+                      <h4 className="text-[15px] font-semibold text-[#1d1d1f]">Click or drag and drop your customer audience file</h4>
+                      <p className="mt-1 text-[13px] text-[#6e6e73]">CSV, XLS or XLSX, up to 25 MB</p>
+                      <p className="mt-3 text-[13px] text-[#6e6e73]">A row missing both email and phone is skipped on its own; the rest of the file is kept.</p>
                     </div>
-
-                    <div className="bg-neutral-100/90 border border-neutral-200 rounded-xl p-3.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-neutral-700 uppercase tracking-wider">
-                          Skipped Rows
-                        </span>
-                        <span className="text-[10px] font-bold text-neutral-500 bg-white px-2 py-0.5 rounded border border-neutral-200">
-                          {pendingFile.rowsSkipped} rows
-                        </span>
+                  ) : (
+                    <div className="flex items-center justify-between rounded-[14px] bg-[#f5f5f7] px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <FileSpreadsheet size={22} className="text-[#0071e3]" />
+                        <div>
+                          <div className="text-[15px] font-medium text-[#1d1d1f]">{pendingFile.name}</div>
+                          <div className="text-[13px] text-[#6e6e73]">{pendingFile.size}</div>
+                        </div>
                       </div>
-                      <div className="mt-2 space-y-1">
+                      <button
+                        type="button"
+                        title="Replace file"
+                        onClick={() => { setPendingFile(null); setHasRunSample(false); }}
+                        className="rounded-full p-2 text-[#6e6e73] hover:bg-[#e8e8ed] hover:text-[#1d1d1f]"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {pendingFile && (
+                  <div className="flex flex-col gap-3">
+                    <h4 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-[#6e6e73]">Validation</h4>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="rounded-[14px] bg-[#f5f5f7] p-5">
+                        <div className="text-[13px] text-[#6e6e73]">Accepted rows</div>
+                        <div className="mt-1 text-[28px] font-semibold tracking-tight text-[#1d1d1f]">{pendingFile.rowsAccepted.toLocaleString('en-IN')}</div>
+                        <div className="text-[13px] text-[#6e6e73]">Ready for customer insight profiling</div>
+                      </div>
+                      <div className="rounded-[14px] bg-[#f5f5f7] p-5">
+                        <div className="text-[13px] text-[#6e6e73]">Skipped rows</div>
+                        <div className="mt-1 text-[28px] font-semibold tracking-tight text-[#1d1d1f]">{pendingFile.rowsSkipped.toLocaleString('en-IN')}</div>
+                        <div className="text-[13px] text-[#6e6e73]">Not charged</div>
+                      </div>
+                    </div>
+                    <div className="rounded-[14px] border border-[#e5e5ea] p-5">
+                      <h5 className="mb-2 text-sm font-semibold text-[#1d1d1f]">Why rows were skipped</h5>
+                      <div className="flex flex-col gap-1.5">
                         {pendingFile.skipReasons.map((reason, idx) => (
-                          <div key={idx} className="text-[10px] text-neutral-600 flex items-start justify-between gap-2">
-                            <span className="truncate">• {reason.reason}</span>
-                            <span className="font-mono font-bold text-neutral-700 shrink-0">({reason.count})</span>
+                          <div key={idx} className="flex items-start justify-between gap-4 text-[14px] text-[#6e6e73]">
+                            <span>{reason.reason}</span>
+                            <span className="flex-none font-medium text-[#1d1d1f]">{reason.count}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                   </div>
+                )}
+              </WizardCard>
 
-                  {/* 7. Run Customer Insight Scoring sample button */}
-                  <div className="pt-1">
-                    <div className="p-4 bg-gradient-to-r from-blue-50 via-indigo-50/50 to-blue-50 border border-blue-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                          <Sparkles size={18} />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-xs font-bold text-neutral-900">Run Customer Insight Scoring sample</h4>
-                            {hasRunSample && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                                <Check size={11} className="stroke-[3]" /> Sample Completed
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-neutral-500 mt-0.5">
-                            Free test pass on 5 real prospects to calculate empirical CIC and view persona preview.
-                          </p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleOpenSampleModal}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all active:scale-98 cursor-pointer shrink-0 flex items-center justify-center gap-1.5"
-                      >
-                        <PlayCircle size={14} />
-                        <span>{hasRunSample ? "Re-run Sample Scoring" : "Run Scoring Sample"}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* 8. Stat Tiles: Cost estimate, Running total spend, Est. CIC vs Target */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                    
-                    {/* Cost Estimate (this file) */}
-                    <div className="bg-white border border-neutral-200 rounded-xl p-4 flex flex-col justify-between shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider">
-                          Cost estimate (this file)
-                        </span>
-                        {hasRunSample && (
-                          <span className="text-[9px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
-                            Based on sample
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-2 flex items-baseline justify-between">
-                        <span className="text-xl font-black text-neutral-900 tracking-tight">
-                          ₹{effectiveFileCost.toLocaleString('en-IN')}
-                        </span>
-                        <span className="text-[10px] font-semibold text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
-                          {pendingFile.rowsAccepted} rows
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Running total spend (this campaign) */}
-                    <div className="bg-white border border-neutral-200 rounded-xl p-4 flex flex-col justify-between shadow-2xs">
-                      <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider">
-                        Running total spend
-                      </span>
-                      <div className="mt-2 flex items-baseline justify-between">
-                        <span className="text-xl font-black text-neutral-900 tracking-tight">
-                          ₹{runningTotalSpend.toLocaleString('en-IN')}
-                        </span>
-                        <span className="text-[10px] font-semibold text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
-                          {isExistingCampaign ? 'Cumulative' : 'Initial file'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Est. CIC vs Target */}
-                    <div className={`border rounded-xl p-4 flex flex-col justify-between transition-all ${
-                      isWithinTarget
-                        ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950'
-                        : 'bg-amber-50/80 border-amber-300 text-amber-950'
-                    }`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                            isWithinTarget ? 'text-emerald-700' : 'text-amber-700'
-                          }`}>
-                            Est. CIC vs Target
-                          </span>
+              {pendingFile && (
+                <>
+                  <WizardCard title="Scoring sample">
+                    <div className="-mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="max-w-[520px] space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-[#f0f0f3] px-2.5 py-[3px] text-xs font-medium text-[#6e6e73]">Optional · free</span>
                           {hasRunSample && (
-                            <span className="text-[9px] font-bold text-emerald-800 bg-emerald-100/90 px-1.5 py-0.2 rounded">
-                              Based on sample
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[#e8f5ec] px-2.5 py-[3px] text-xs font-medium text-[#1d7a3a]">
+                              <Check size={11} className="stroke-[3]" /> Sample completed
                             </span>
                           )}
                         </div>
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
-                          isWithinTarget 
-                            ? 'bg-emerald-600 text-white' 
-                            : 'bg-amber-600 text-white'
-                        }`}>
-                          {isWithinTarget ? (
-                            <Check size={12} className="stroke-[3]" />
-                          ) : (
-                            <AlertTriangle size={12} className="stroke-[3]" />
-                          )}
-                        </div>
+                        <p className="text-[15px] leading-relaxed text-[#6e6e73]">A free test pass on 5 real prospects. It works out your real cost per insight and shows a persona preview before you commit.</p>
+                        <p className="text-[13px] text-[#86868b]">Does not charge your account balance. You can run the campaign without it.</p>
                       </div>
+                      <button
+                        type="button"
+                        onClick={handleOpenSampleModal}
+                        className="inline-flex h-12 flex-none items-center justify-center gap-2 rounded-full bg-[#1d1d1f] px-7 text-base font-medium text-white hover:bg-black"
+                      >
+                        <PlayCircle size={16} />
+                        {hasRunSample ? 'Re-run sample scoring' : 'Run scoring sample'}
+                      </button>
+                    </div>
+                  </WizardCard>
 
-                      <div className="mt-2">
-                        <div className="flex items-baseline gap-2">
-                          <span className={`text-xl font-black tracking-tight ${
-                            isWithinTarget ? 'text-emerald-900' : 'text-amber-900'
-                          }`}>
-                            ₹{estCIC}
-                          </span>
-                          <span className="text-[11px] text-neutral-500 font-medium">
-                            (Target: ₹{targetCIC})
-                          </span>
+                  <WizardCard title="Cost & target check">
+                    <div className="-mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className="rounded-[14px] bg-[#f5f5f7] p-5">
+                        <div className="text-[13px] text-[#6e6e73]">Cost estimate (this file)</div>
+                        <div className="mt-1 text-[26px] font-semibold tracking-tight text-[#1d1d1f]">₹{effectiveFileCost.toLocaleString('en-IN')}</div>
+                        <div className="text-[13px] text-[#6e6e73]">{hasRunSample ? 'Based on sample' : 'Flat rate until a sample is run'}</div>
+                      </div>
+                      <div className="rounded-[14px] bg-[#f5f5f7] p-5">
+                        <div className="text-[13px] text-[#6e6e73]">Running total spend</div>
+                        <div className="mt-1 text-[26px] font-semibold tracking-tight text-[#1d1d1f]">₹{runningTotalSpend.toLocaleString('en-IN')}</div>
+                        <div className="text-[13px] text-[#6e6e73]">{isExistingCampaign ? 'Cumulative' : 'Initial file'}</div>
+                      </div>
+                      <div className="rounded-[14px] bg-[#f5f5f7] p-5">
+                        <div className="text-[13px] text-[#6e6e73]">Est. CIC vs target</div>
+                        <div className="mt-1 flex items-baseline gap-2">
+                          <span className="text-[26px] font-semibold tracking-tight text-[#1d1d1f]">₹{estCIC}</span>
+                          <span className="text-[13px] text-[#6e6e73]">Target ₹{targetCIC}</span>
                         </div>
-                        <p className={`text-[10.5px] font-semibold mt-1 leading-snug ${
-                          isWithinTarget ? 'text-emerald-700' : 'text-amber-800'
-                        }`}>
-                          Profiling this file will cost ~₹{estCIC} per customer.
-                        </p>
+                        <div className={`inline-flex items-center gap-1 text-[13px] font-medium ${isWithinTarget ? 'text-[#1d7a3a]' : 'text-[#b25000]'}`}>
+                          {isWithinTarget ? <Check size={12} className="stroke-[3]" /> : <AlertTriangle size={12} />}
+                          {isWithinTarget ? 'Within target' : 'Above target'}{hasRunSample ? ' · based on sample' : ''}
+                        </div>
                       </div>
                     </div>
-
-                  </div>
-                </div>
+                  </WizardCard>
+                </>
               )}
-            </div>
 
-            {/* 9. Advanced Settings (Collapsible, closed by default) */}
-            <div className="border border-neutral-200/80 rounded-xl overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                className="w-full px-5 py-3.5 bg-neutral-50 hover:bg-neutral-100/70 transition-colors flex items-center justify-between text-left cursor-pointer"
-              >
+              <WizardCard>
                 <div className="flex items-center gap-2.5">
-                  <SlidersHorizontal size={14} className="text-neutral-500" />
-                  <span className="text-xs font-bold text-neutral-800 uppercase tracking-wide">
-                    Advanced settings
-                  </span>
-                  <span className="text-[10px] font-semibold text-neutral-500 bg-white border border-neutral-200 px-2 py-0.5 rounded-full">
-                    Budget cap & notes
-                  </span>
+                  <h3 className="text-[22px] font-semibold tracking-[-0.01em] text-[#1d1d1f]">More options</h3>
+                  <span className="rounded-full bg-[#f0f0f3] px-2.5 py-[3px] text-xs font-medium text-[#6e6e73]">Optional</span>
                 </div>
-                <div className="flex items-center gap-1 text-xs text-neutral-500 font-medium">
-                  <span>{showAdvanced ? 'Hide controls' : 'Show controls'}</span>
-                  {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </div>
-              </button>
-
-              {showAdvanced && (
-                <div className="p-5 sm:p-6 bg-white space-y-4 border-t border-neutral-200/80">
-                  {/* Total budget cap */}
-                  <div>
-                    <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
-                      <span>Total budget cap (₹)</span>
-                      <InfoTooltip content="Optional hard spend ceiling. Hard-stops the campaign once reached, no matter how many files are added later." />
-                    </label>
+                <div className="flex max-w-[640px] flex-col gap-6">
+                  <div className="flex flex-col gap-2">
+                    <FieldLabel htmlFor="ci-cap">Total budget cap (₹)</FieldLabel>
                     <div className="relative">
-                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-xs">₹</span>
-                      <input 
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base text-[#6e6e73]">₹</span>
+                      <input
+                        id="ci-cap"
                         type="number"
                         min="1"
                         step="1000"
@@ -1055,98 +800,103 @@ export const CustomerInsightBuilder: React.FC<CustomerInsightBuilderProps> = ({
                           setTouched(prev => ({ ...prev, budgetCap: true }));
                         }}
                         placeholder="e.g. 50000"
-                        className="w-full pl-8 pr-4 py-2 text-xs bg-neutral-50/70 focus:bg-white border border-neutral-200 rounded-xl text-neutral-900 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                        className={`${inputCls(touched.budgetCap && totalBudgetCap !== '' && Number(totalBudgetCap) <= 0)} pl-9`}
                       />
                     </div>
+                    <p className="text-[13px] text-[#6e6e73]">A hard spend ceiling. The campaign stops once it is reached, however many files are added later.</p>
                     {touched.budgetCap && totalBudgetCap !== '' && Number(totalBudgetCap) <= 0 && (
-                      <p className="text-[11px] text-red-500 font-bold mt-1.5 flex items-center gap-1">
-                        <AlertTriangle size={12} /> Total budget cap must be greater than ₹0.
-                      </p>
+                      <p className="text-[13px] text-[#d70015]">Total budget cap must be greater than ₹0.</p>
                     )}
                   </div>
-
-                  {/* Internal notes / objective */}
-                  <div>
-                    <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
-                      <span>Internal notes / objective</span>
-                      <InfoTooltip content="Record campaign objective, audience cohort origin, or profiling notes." />
-                    </label>
-                    <textarea 
-                      rows={2}
+                  <div className="flex flex-col gap-2">
+                    <FieldLabel htmlFor="ci-notes">Internal notes / objective</FieldLabel>
+                    <textarea
+                      id="ci-notes"
+                      rows={3}
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="Record internal notes, campaign objective, or team attribution..."
-                      className="w-full px-3.5 py-2 text-xs bg-neutral-50/70 focus:bg-white border border-neutral-200 rounded-xl text-neutral-900 font-medium placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                      className="w-full rounded-xl border border-[#d2d2d7] bg-white px-4 py-3 text-base text-[#1d1d1f] outline-none focus:border-[#0071e3]"
                     />
                   </div>
                 </div>
-              )}
-            </div>
+              </WizardCard>
+            </>
+          )}
 
-            {/* 10. Consent Checkbox */}
-            <div className="p-4 bg-neutral-50/80 border border-neutral-200/80 rounded-xl">
-              <label className="flex items-start gap-3 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={consentConfirmed}
-                  onChange={(e) => {
-                    setConsentConfirmed(e.target.checked);
-                    setTouched(prev => ({ ...prev, consent: true }));
-                  }}
-                  className="w-4 h-4 text-blue-600 rounded border-neutral-300 focus:ring-blue-500 mt-0.5 cursor-pointer"
-                  id="consent_checkbox"
-                />
-                <span className="text-xs text-neutral-700 font-semibold leading-relaxed">
-                  I confirm this list was collected with consent covering behavioral and psychological profiling, not only contact use.
-                </span>
-              </label>
-              {touched.consent && !consentConfirmed && (
-                <p className="text-[11px] text-red-500 font-bold mt-2 flex items-center gap-1">
-                  <AlertTriangle size={12} /> Profiling consent confirmation is required before running campaign.
-                </p>
-              )}
-            </div>
+          {/* STEP 3: TOP 5 EMAILS */}
+          {step === 3 && (
+            <TopEmailsStep
+              emails={emails}
+              onChange={setEmails}
+              lead="Pick five of your best customers. They help our model learn what your customers look like, so personas and insights are more accurate."
+              noteTail="not added to your audience file"
+            />
+          )}
 
-            {/* 11. Actions Footer: Cancel, Clone campaign (if existing), and Run */}
-            <div className="pt-4 border-t border-neutral-200/80 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={onCancel}
-                className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold text-neutral-600 hover:text-neutral-900 bg-transparent hover:bg-neutral-100 rounded-xl transition-all cursor-pointer text-center"
-              >
-                Cancel
-              </button>
+          {/* STEP 4: REVIEW & CONSENT */}
+          {step === 4 && (
+            <ReviewConsentStep
+              kind="insight"
+              actionWord="run"
+              acks={acks}
+              onToggle={(i) => setAcks(prev => prev.map((v, idx) => (idx === i ? !v : v)))}
+              sections={[
+                { heading: 'Basics', rows: [
+                  ['Campaign name', campaignName.trim() || '-'],
+                  ['Target CIC', `₹${targetCIC}`],
+                  ['Use-case tag', useCaseTag],
+                  ['Business line', businessLine || '-'],
+                ] },
+                { heading: 'Audience file', rows: [
+                  ['File', pendingFile ? pendingFile.name : '-'],
+                  ['Rows', pendingFile ? pendingFile.rowsAccepted.toLocaleString('en-IN') : '-'],
+                  ['Scoring sample', hasRunSample ? 'Run' : 'Not run'],
+                  ['Cost estimate', `₹${effectiveFileCost.toLocaleString('en-IN')}`],
+                  ['Est. CIC vs target', `₹${estCIC} vs ₹${targetCIC}`],
+                  ['Total budget cap', totalBudgetCap !== '' ? `₹${Number(totalBudgetCap).toLocaleString('en-IN')}` : 'None'],
+                  ['Internal notes', notes.trim() || 'None'],
+                ] },
+                { heading: 'Top 5 emails', rows: [
+                  ['Emails', `${Math.min(cleanEmails(emails).length, 5)} of 5 added`],
+                ] },
+              ]}
+            />
+          )}
 
-              <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto">
-                {isExistingCampaign && selectedCampaign && (
-                  <button
-                    type="button"
-                    onClick={() => onClone(selectedCampaign)}
-                    className="w-full sm:w-auto px-4 py-2.5 text-xs font-bold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 rounded-xl shadow-2xs transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <Copy size={13} className="text-neutral-500" />
-                    <span>Clone campaign</span>
-                  </button>
-                )}
-
+          {/* FOOTER */}
+          {step === 4 && isExistingCampaign && selectedCampaign ? (
+            <div className="mt-2 flex items-center justify-between">
+              <button type="button" onClick={() => setStep(3)} className="px-2 text-base font-medium text-[#0071e3] hover:opacity-80">Back</button>
+              <div className="flex items-center gap-3">
+                <span className="text-[13px] text-[#6e6e73]">Step 4 of 4</span>
                 <button
                   type="button"
-                  disabled={!isFormValid}
-                  onClick={handleRunClick}
-                  className={`w-full sm:w-auto px-8 py-2.5 text-xs font-bold text-white rounded-xl shadow-sm transition-all focus:outline-none flex items-center justify-center gap-2 ${
-                    !isFormValid
-                      ? 'bg-neutral-300 cursor-not-allowed text-neutral-500'
-                      : 'bg-blue-600 hover:bg-blue-700 active:scale-98 cursor-pointer shadow-blue-500/20 shadow-md'
-                  }`}
-                  id="run_customer_insight_campaign_btn"
+                  onClick={() => onClone(selectedCampaign)}
+                  className="inline-flex h-12 items-center gap-1.5 rounded-full bg-[#e8e8ed] px-7 text-base font-medium text-[#1d1d1f]"
                 >
-                  <Activity size={14} />
-                  <span>Run</span>
+                  <Copy size={14} /> Clone campaign
+                </button>
+                <button
+                  type="button"
+                  id="run_customer_insight_campaign_btn"
+                  onClick={handleRunClick}
+                  disabled={!canRun}
+                  className="h-12 rounded-full bg-[#0071e3] px-7 text-base font-medium text-white transition-colors hover:bg-[#0077ed] disabled:cursor-not-allowed disabled:bg-[#b9d7f7]"
+                >
+                  Run customer insight
                 </button>
               </div>
             </div>
-
-          </div>
+          ) : (
+            <WizardFooter
+              step={step}
+              onBack={() => (step === 1 ? onCancel() : setStep(step - 1))}
+              onNext={step === 4 ? handleRunClick : () => setStep(step + 1)}
+              nextLabel={step === 4 ? 'Run customer insight' : 'Continue'}
+              nextDisabled={step === 1 ? !step1Valid : step === 2 ? !step2Valid : step === 3 ? !emailsComplete(emails) : !canRun}
+            />
+          )}
         </>
       )}
 

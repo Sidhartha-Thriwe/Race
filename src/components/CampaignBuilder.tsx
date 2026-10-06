@@ -1,23 +1,18 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  Check, 
-  AlertTriangle, 
-  Calendar, 
-  Sparkles, 
-  Search, 
-  X, 
-  ChevronDown, 
-  ChevronUp, 
-  ChevronRight, 
-  Lock, 
-  TrendingDown, 
-  Info, 
-  HelpCircle,
-  ShieldCheck,
-  Building2,
-  SlidersHorizontal,
-  ArrowRight
-} from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import {
+  WizardHeader,
+  WizardCard,
+  WizardFooter,
+  TopEmailsStep,
+  ReviewConsentStep,
+  buildConsent,
+  emailsComplete,
+  cleanEmails,
+  FieldLabel,
+  inputCls,
+  Chip,
+} from './campaign-builder/wizard';
+import type { CampaignConsent, SummarySection } from './campaign-builder/wizard';
 
 export interface Campaign {
   id: string;
@@ -54,6 +49,8 @@ export interface Campaign {
   ticketSizeMax?: number;
   purchaseCycle?: 'One-time' | 'Recurring subscription';
   avgSaleCycle?: '1 Day' | '1 Week' | '1 Month';
+  topEmails?: string[];
+  consent?: CampaignConsent;
 }
 
 interface CampaignBuilderProps {
@@ -61,19 +58,7 @@ interface CampaignBuilderProps {
   onSave: (campaign: Campaign) => void;
 }
 
-const InfoTooltip: React.FC<{ content: string }> = ({ content }) => {
-  return (
-    <div className="group relative inline-flex items-center ml-1.5 text-neutral-400 hover:text-neutral-600 transition-colors cursor-help align-middle">
-      <Info size={13} className="inline-block" />
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 hidden group-hover:block w-64 p-2.5 bg-neutral-900 text-white text-[11px] leading-relaxed rounded-lg shadow-xl font-medium border border-neutral-800 z-[999] text-center pointer-events-none transition-all duration-150">
-        <div className="relative">
-          {content}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-neutral-900 border-r border-b border-neutral-800 rotate-45 mt-[3.5px]" />
-        </div>
-      </div>
-    </div>
-  );
-};
+const STEP_LABELS = ['Basics', 'Targeting & budget', 'Top 5 emails', 'Review & consent'];
 
 const ALL_CATEGORIES = [
   "Golf", 
@@ -147,7 +132,6 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onCancel, onSa
   const [startDate, setStartDate] = useState('2026-09-22');
 
   // Advanced settings state (collapsed by default)
-  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(["Golf", "Leisure travel"]);
   const [confidence, setConfidence] = useState<'High' | 'Medium' | 'Both'>('High'); // Defaults to High
   const [excludeDelivered, setExcludeDelivered] = useState<boolean>(true); // Defaults to true
@@ -157,6 +141,14 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onCancel, onSa
 
   // Touched / validation tracking
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [attempted, setAttempted] = useState<Record<number, boolean>>({});
+  const [step, setStep] = useState(1);
+  const [emails, setEmails] = useState<string[]>(['', '', '', '', '']);
+  const [acks, setAcks] = useState<boolean[]>([false, false, false, false]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [step]);
 
   // 3. Computed End Date based on duration
   const endDate = useMemo(() => {
@@ -390,327 +382,235 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onCancel, onSa
       avgSaleCycle: '1 Week'
     };
 
+    const cleaned = cleanEmails(emails);
+    if (cleaned.length > 0) campaignToSave.topEmails = cleaned;
+    if (status === 'Active') campaignToSave.consent = buildConsent('leadgen');
+
     onSave(campaignToSave);
   };
 
-  // Format currency display
-  const formatTicketSize = (amt: number) => {
-    if (amt >= 10000000) {
-      return `₹${(amt / 10000000).toFixed(amt % 10000000 === 0 ? 0 : 1)} Cr`;
+  const fmtINR = (n: number) => `₹${n.toLocaleString('en-IN')}`;
+  const step1Valid = !!name.trim() && !!targetCAC && targetCAC > 0 && !!businessLine;
+  const step2Valid =
+    selectedGeographies.length > 0 &&
+    budgetPerDay > 0 &&
+    durationDays >= 1 &&
+    !(totalBudgetCap !== '' && totalBudgetCap < budgetPerDay);
+
+  const goNext = () => {
+    if (step === 1) {
+      setAttempted(a => ({ ...a, 1: true }));
+      if (!step1Valid) return;
+    } else if (step === 2) {
+      setAttempted(a => ({ ...a, 2: true }));
+      if (!step2Valid) return;
     }
-    if (amt >= 100000) {
-      return `₹${(amt / 100000).toFixed(amt % 100000 === 0 ? 0 : 1)}L`;
-    }
-    return `₹${amt.toLocaleString('en-IN')}`;
+    setStep(s => Math.min(4, s + 1));
+  };
+  const goBack = () => {
+    if (step === 1) onCancel();
+    else setStep(s => Math.max(1, s - 1));
   };
 
+  const show = (key: string, step_: number) => !!touched[key] || !!attempted[step_];
+  const nameBad = show('name', 1) && !name.trim();
+  const cacBad = show('targetCAC', 1) && (!targetCAC || targetCAC <= 0);
+  const geoBad = show('geographies', 2) && selectedGeographies.length === 0;
+  const budgetBad = show('budgetPerDay', 2) && budgetPerDay <= 0;
+  const durationBad = show('durationDays', 2) && durationDays < 1;
+  const capBad = totalBudgetCap !== '' && totalBudgetCap < budgetPerDay;
+
+  const Err: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <p className="mt-1.5 text-[13px] text-[#d70015]">{children}</p>
+  );
+  const Hint: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <p className="mt-1.5 text-[13px] text-[#6e6e73]">{children}</p>
+  );
+
+  const Toggle: React.FC<{ label: string; hint: string; on: boolean; onClick: () => void }> = ({ label, hint, on, onClick }) => (
+    <div className="flex items-center justify-between gap-4 rounded-[14px] border border-[#e5e5ea] px-5 py-4">
+      <div>
+        <div className="text-[15px] font-medium text-[#1d1d1f]">{label}</div>
+        <div className="text-[13px] text-[#6e6e73]">{hint}</div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label={label}
+        onClick={onClick}
+        className={`relative h-[30px] w-[50px] flex-none rounded-full transition-colors ${on ? 'bg-[#1d1d1f]' : 'bg-[#d2d2d7]'}`}
+      >
+        <span className={`absolute left-[3px] top-[3px] h-6 w-6 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-5' : 'translate-x-0'}`} />
+      </button>
+    </div>
+  );
+
+  const tile = 'rounded-[14px] bg-[#f5f5f7] p-4';
+  const tileLabel = 'text-[12px] font-medium uppercase tracking-[0.05em] text-[#6e6e73]';
+  const tileVal = 'mt-2 text-[26px] font-semibold tracking-[-0.01em] text-[#1d1d1f]';
+
+  const reviewSections: SummarySection[] = [
+    {
+      heading: 'Basics',
+      rows: [
+        ['Campaign name', name.trim() || '—'],
+        ['Target CAC', targetCAC ? fmtINR(targetCAC) : '—'],
+        ['Business line', businessLine || '—'],
+      ],
+    },
+    {
+      heading: 'Targeting & budget',
+      rows: [
+        ['Geography', selectedGeographies.length ? selectedGeographies.join(', ') : '—'],
+        ['Budget', `${fmtINR(budgetPerDay)} / day · ${durationDays} days`],
+        ['Category affinity', selectedCategories.length ? selectedCategories.join(', ') : 'None'],
+        ['Confidence', confidence],
+        ['Exclusions', [excludeDelivered && 'Previously-delivered leads', excludeExisting && 'Existing customers'].filter(Boolean).join(', ') || 'None'],
+        ['Total budget cap', totalBudgetCap === '' ? 'None' : fmtINR(totalBudgetCap)],
+        ['Forecast', `~${forecast.totalLeads.toLocaleString('en-IN')} leads · ${fmtINR(forecast.totalSpend)}`],
+      ],
+    },
+    {
+      heading: 'Top 5 emails',
+      rows: [['Emails', `${Math.min(5, cleanEmails(emails).length)} of 5 added`]],
+    },
+  ];
+
+  const allAcked = acks.every(Boolean);
+
   return (
-    <div className="space-y-6 pb-16 select-none font-sans max-w-5xl mx-auto w-full">
-      {/* Breadcrumbs */}
-      <div className="flex items-center gap-2 text-xs text-neutral-400 font-semibold mb-2">
-        <span className="hover:text-neutral-700 cursor-pointer transition-colors" onClick={onCancel}>Lead Gen</span>
-        <ChevronRight size={12} />
-        <span className="text-neutral-900 font-bold">Campaign builder</span>
-      </div>
+    <div className="space-y-6 pb-16 font-sans max-w-5xl mx-auto w-full">
+      <WizardHeader
+        section="Lead Gen"
+        title="Create Target Campaign"
+        subtitle="Target-first campaign setup powered by your verified client profile."
+        client={clientProfile}
+        steps={STEP_LABELS}
+        step={step}
+        onCancel={onCancel}
+        onJump={(n) => setStep(n)}
+      />
 
-      {/* Hero Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-neutral-200/70 pb-4">
-        <div>
-          <h2 className="text-xl font-extrabold text-neutral-900 tracking-tight">Create Target Campaign</h2>
-          <p className="text-xs text-neutral-500 mt-0.5">Target-first campaign setup powered by your verified client profile.</p>
-        </div>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="text-xs font-semibold text-neutral-500 hover:text-neutral-800 transition-colors self-start sm:self-auto cursor-pointer"
-        >
-          Cancel & Exit
-        </button>
-      </div>
-
-      {/* 1. Client Profile Strip (Read-only) */}
-      <div className="bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 text-white rounded-xl p-4 shadow-sm border border-neutral-700/60 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0">
-            <Building2 size={18} />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold tracking-wide text-neutral-200 truncate">{clientProfile.name}</span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-neutral-400 bg-white/10 px-2 py-0.5 rounded">
-                <Lock size={10} className="text-neutral-400" /> Read-only
-              </span>
-            </div>
-            <div className="text-xs text-neutral-300 font-medium flex items-center gap-2 mt-0.5 flex-wrap">
-              <span><strong className="text-white font-bold">{clientProfile.industry}</strong></span>
-              <span className="text-neutral-500">•</span>
-              <span>Ticket size: <strong className="text-white font-bold">{formatTicketSize(clientProfile.ticketSize)}</strong></span>
-              <span className="text-neutral-500">•</span>
-              <span>Channel: <strong className="text-white font-bold">{clientProfile.purchaseChannel}</strong></span>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 pt-1 md:pt-0 border-t md:border-t-0 border-neutral-700/60 shrink-0">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-blue-400 bg-blue-500/10 border border-blue-400/25 px-2.5 py-1 rounded-md">
-            <span>Managed in Client Onboarding</span>
-          </span>
-        </div>
-      </div>
-
-      {/* Main Campaign Configuration Card */}
-      <div className="bg-white border border-neutral-200/80 rounded-2xl p-6 sm:p-7 shadow-sm space-y-7">
-        
-        {/* 2. Campaign Name */}
-        <div>
-          <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
-            <span>Campaign name</span> <span className="text-red-500 ml-1">*</span>
-            <InfoTooltip content="A descriptive identifier for this campaign in reporting tables and lead acquisition logs." />
-          </label>
-          <input 
-            type="text" 
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              setTouched(prev => ({ ...prev, name: true }));
-            }}
-            placeholder="e.g. Zenith Festive Luxury Drive 2026"
-            className={`w-full px-4 py-2.5 text-xs bg-neutral-50/70 border ${
-              touched.name && !name.trim() 
-                ? 'border-red-400 focus:ring-red-400/25' 
-                : 'border-neutral-200 focus:border-blue-500 focus:ring-blue-500/20'
-            } rounded-xl text-neutral-900 placeholder-neutral-400 font-semibold focus:outline-none focus:ring-2 focus:bg-white transition-all`}
-          />
-          {touched.name && !name.trim() && (
-            <p className="text-[11px] text-red-500 font-bold mt-1.5 flex items-center gap-1">
-              <AlertTriangle size={12} /> Campaign name is required.
-            </p>
-          )}
-        </div>
-
-        {/* 3. Target CAC (Large Currency Input placed first) */}
-        <div className="bg-blue-50/40 border border-blue-200/60 rounded-xl p-5 space-y-2">
-          <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
-            <span>Target CAC</span> <span className="text-red-500 ml-1">*</span>
-            <InfoTooltip content="The maximum acquisition cost per prospect you are willing to spend. Used as the benchmark for pacing and match quality." />
-          </label>
-          
-          <div className="relative">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 font-extrabold text-lg">₹</span>
-            <input 
-              type="number" 
-              value={targetCAC || ''}
+      {step === 1 && (
+        <WizardCard title="Basics" lead="Name your campaign and set what you are willing to pay per prospect.">
+          <div className="flex flex-col gap-2">
+            <FieldLabel htmlFor="cb-name">Campaign name<span className="ml-1 text-[#d70015]">*</span></FieldLabel>
+            <input
+              id="cb-name"
+              type="text"
+              value={name}
               onChange={(e) => {
-                const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                setTargetCAC(val);
-                setTouched(prev => ({ ...prev, targetCAC: true }));
+                setName(e.target.value);
+                setTouched(prev => ({ ...prev, name: true }));
               }}
-              placeholder="e.g. 2500"
-              className={`w-full pl-9 pr-4 py-3 text-lg font-bold bg-white border ${
-                touched.targetCAC && (!targetCAC || targetCAC <= 0)
-                  ? 'border-red-400 focus:ring-red-400/25'
-                  : 'border-blue-300/80 focus:border-blue-600 focus:ring-blue-500/20'
-              } rounded-xl text-neutral-900 focus:outline-none focus:ring-3 transition-all`}
+              placeholder="e.g. Zenith Festive Luxury Drive 2026"
+              className={inputCls(nameBad)}
             />
+            {nameBad && <Err>Campaign name is required.</Err>}
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[11px] pt-1">
-            <p className="text-neutral-500 font-medium">
-              What you're willing to pay per prospect.
-            </p>
-            <p className="text-neutral-600 font-semibold flex items-center gap-1">
-              <span>Your last 30 days avg:</span>
-              <span className="inline-flex items-center text-neutral-900 font-bold bg-white px-2 py-0.5 rounded border border-neutral-200 shadow-2xs">
-                ₹2,450
-              </span>
-            </p>
+          <div className="flex max-w-[360px] flex-col gap-2">
+            <FieldLabel htmlFor="cb-cac">Target CAC<span className="ml-1 text-[#d70015]">*</span></FieldLabel>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base text-[#6e6e73]">₹</span>
+              <input
+                id="cb-cac"
+                type="number"
+                value={targetCAC || ''}
+                onChange={(e) => {
+                  const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                  setTargetCAC(val);
+                  setTouched(prev => ({ ...prev, targetCAC: true }));
+                }}
+                placeholder="e.g. 2500"
+                className={`${inputCls(cacBad)} pl-9`}
+              />
+            </div>
+            <Hint>What you are willing to pay per prospect. Your last 30 days average: ₹2,450.</Hint>
+            {cacBad && <Err>Target CAC must be greater than ₹0.</Err>}
           </div>
 
-          {touched.targetCAC && (!targetCAC || targetCAC <= 0) && (
-            <p className="text-[11px] text-red-500 font-bold flex items-center gap-1">
-              <AlertTriangle size={12} /> Target CAC must be greater than ₹0.
-            </p>
-          )}
-        </div>
-
-        {/* 4. Business Line (Single-select scoped to client profile) */}
-        <div>
-          <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
-            <span>Business line</span> <span className="text-red-500 ml-1">*</span>
-            <InfoTooltip content="Scoped to your onboarded business lines. Replaces general product sectors to match your actual operational scope." />
-          </label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            {clientProfile.businessLines.map((line) => {
-              const isSelected = businessLine === line;
-              return (
-                <button
+          <div className="flex flex-col gap-2">
+            <FieldLabel>Business line<span className="ml-1 text-[#d70015]">*</span></FieldLabel>
+            <div className="flex flex-wrap gap-2.5">
+              {clientProfile.businessLines.map((line: string) => (
+                <Chip
                   key={line}
-                  type="button"
+                  on={businessLine === line}
                   onClick={() => {
                     setBusinessLine(line);
                     setTouched(prev => ({ ...prev, businessLine: true }));
                   }}
-                  className={`px-3.5 py-2.5 text-xs font-bold rounded-xl border transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
-                    isSelected
-                      ? 'bg-neutral-900 text-white border-neutral-900 shadow-xs'
-                      : 'bg-neutral-50/70 text-neutral-700 border-neutral-200 hover:bg-neutral-100 hover:text-neutral-900'
-                  }`}
                 >
-                  {isSelected && <Check size={13} className="shrink-0 stroke-[3]" />}
-                  <span>{line}</span>
-                </button>
-              );
-            })}
-          </div>
-          {touched.businessLine && !businessLine && (
-            <p className="text-[11px] text-red-500 font-bold mt-1.5 flex items-center gap-1">
-              <AlertTriangle size={12} /> Please select a business line.
-            </p>
-          )}
-        </div>
-
-        {/* 5. Geography (Searchable multi-select) */}
-        <div className="space-y-2">
-          <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
-            <span>Geography Metros</span> <span className="text-red-500 ml-1">*</span>
-            <InfoTooltip content="Filter leads residing or conducting transactions in these designated target metro markets." />
-          </label>
-
-          {/* Selected city tags */}
-          {selectedGeographies.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {selectedGeographies.map(city => (
-                <span key={city} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 text-xs font-bold bg-neutral-100 text-neutral-800 rounded-lg border border-neutral-200 shadow-2xs">
-                  {city}
-                  <button 
-                    type="button" 
-                    onClick={() => removeGeography(city)}
-                    className="p-0.5 text-neutral-400 hover:text-neutral-800 hover:bg-neutral-200 rounded transition-colors cursor-pointer"
-                  >
-                    <X size={12} />
-                  </button>
-                </span>
+                  {line}
+                </Chip>
               ))}
             </div>
-          )}
+            {show('businessLine', 1) && !businessLine && <Err>Please select a business line.</Err>}
+          </div>
+        </WizardCard>
+      )}
 
-          {/* Search box & Dropdown */}
-          <div className="relative">
-            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
-            <input 
-              type="text"
-              placeholder="Search and add metro cities (e.g. Mumbai, Bengaluru)..."
-              value={geoSearchQuery}
-              onFocus={() => setGeoDropdownOpen(true)}
-              onChange={(e) => {
-                setGeoSearchQuery(e.target.value);
-                setGeoDropdownOpen(true);
-              }}
-              className="w-full pl-9 pr-4 py-2.5 text-xs bg-neutral-50/70 focus:bg-white border border-neutral-200 rounded-xl text-neutral-900 placeholder-neutral-400 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-            />
-
-            {geoDropdownOpen && (
-              <div className="absolute left-0 right-0 mt-1 bg-white border border-neutral-200 rounded-xl shadow-xl z-50 py-1.5 max-h-48 overflow-y-auto">
-                {filteredGeographies.length > 0 ? (
-                  filteredGeographies.map(city => (
-                    <button
-                      key={city}
-                      type="button"
-                      onClick={() => addGeography(city)}
-                      className="w-full text-left px-3.5 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 transition-colors cursor-pointer flex items-center justify-between"
-                    >
-                      <span>{city}</span>
-                      <span className="text-[10px] text-blue-600 font-bold">+ Add</span>
-                    </button>
-                  ))
-                ) : (
-                  <div className="px-3.5 py-2 text-xs text-neutral-400 text-center">
-                    No matching metro cities available
-                  </div>
-                )}
-                <div className="border-t border-neutral-100 mt-1 pt-1 px-2">
-                  <button 
-                    type="button"
-                    onClick={() => setGeoDropdownOpen(false)}
-                    className="w-full text-center py-1 text-[10px] font-bold text-neutral-400 hover:text-neutral-700 uppercase tracking-wider cursor-pointer"
+      {step === 2 && (
+        <>
+          <WizardCard title="Targeting & budget" lead="Choose where to reach people and how much to spend.">
+            <div className="flex flex-col gap-2">
+              <FieldLabel>Geography<span className="ml-1 text-[#d70015]">*</span></FieldLabel>
+              <div className="flex flex-wrap gap-2.5">
+                {ALL_GEOGRAPHIES.map((city) => (
+                  <Chip
+                    key={city}
+                    on={selectedGeographies.includes(city)}
+                    onClick={() => {
+                      setTouched(prev => ({ ...prev, geographies: true }));
+                      if (selectedGeographies.includes(city)) removeGeography(city);
+                      else addGeography(city);
+                    }}
                   >
-                    Close dropdown
-                  </button>
+                    {city}
+                  </Chip>
+                ))}
+              </div>
+              {geoBad && <Err>Please select at least one geography.</Err>}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <FieldLabel hint="Quick presets">Budget templates</FieldLabel>
+              <div className="flex flex-wrap gap-2.5">
+                {[5000, 10000, 25000].map((amt) => (
+                  <Chip key={amt} on={budgetPerDay === amt} onClick={() => applyBudgetTemplate(amt)}>
+                    {fmtINR(amt)} / day
+                  </Chip>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <FieldLabel htmlFor="cb-budget">Budget per day<span className="ml-1 text-[#d70015]">*</span></FieldLabel>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base text-[#6e6e73]">₹</span>
+                  <input
+                    id="cb-budget"
+                    type="number"
+                    value={budgetPerDay || ''}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                      setBudgetPerDay(val);
+                      setTouched(prev => ({ ...prev, budgetPerDay: true }));
+                    }}
+                    placeholder="e.g. 10000"
+                    className={`${inputCls(budgetBad)} pl-9`}
+                  />
                 </div>
+                {budgetBad && <Err>Budget per day must be greater than ₹0.</Err>}
               </div>
-            )}
-          </div>
-
-          {selectedGeographies.length === 0 && touched.geographies && (
-            <p className="text-[11px] text-red-500 font-bold mt-1 flex items-center gap-1">
-              <AlertTriangle size={12} /> Please select at least one geography.
-            </p>
-          )}
-        </div>
-
-        {/* 6. Budget Templates, Budget per Day & Duration */}
-        <div className="space-y-4 pt-1">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide">
-                <span>Budget templates</span>
-                <InfoTooltip content="One-click presets that configure standard daily pacing and a 30-day campaign schedule." />
-              </label>
-              <span className="text-[11px] text-neutral-400 font-medium">Quick presets</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {[5000, 10000, 25000].map((amt) => {
-                const isSelected = budgetPerDay === amt;
-                return (
-                  <button
-                    key={amt}
-                    type="button"
-                    onClick={() => applyBudgetTemplate(amt)}
-                    className={`px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                        : 'bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50 hover:text-neutral-900'
-                    }`}
-                  >
-                    ₹{amt.toLocaleString('en-IN')} / day
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
-                <span>Budget per day (₹)</span> <span className="text-red-500 ml-1">*</span>
-                <InfoTooltip content="Daily marketing capital dedicated to lead matches. Higher pacing secures greater target volume." />
-              </label>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-xs">₹</span>
-                <input 
-                  type="number" 
-                  value={budgetPerDay || ''}
-                  onChange={(e) => {
-                    const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                    setBudgetPerDay(val);
-                    setTouched(prev => ({ ...prev, budgetPerDay: true }));
-                  }}
-                  placeholder="e.g. 10000"
-                  className={`w-full pl-7 pr-3.5 py-2.5 text-xs bg-neutral-50/70 focus:bg-white border ${
-                    touched.budgetPerDay && budgetPerDay <= 0 ? 'border-red-400' : 'border-neutral-200 focus:border-blue-500'
-                  } rounded-xl text-neutral-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all`}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
-                <span>Duration (Days)</span> <span className="text-red-500 ml-1">*</span>
-                <InfoTooltip content="Total planned campaign duration window in calendar days. Defaults to 30 days." />
-              </label>
-              <div className="relative">
-                <Calendar size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
-                <input 
-                  type="number" 
+              <div className="flex flex-col gap-2">
+                <FieldLabel htmlFor="cb-duration">Duration (days)<span className="ml-1 text-[#d70015]">*</span></FieldLabel>
+                <input
+                  id="cb-duration"
+                  type="number"
                   min={1}
                   value={durationDays || ''}
                   onChange={(e) => {
@@ -719,338 +619,153 @@ export const CampaignBuilder: React.FC<CampaignBuilderProps> = ({ onCancel, onSa
                     setTouched(prev => ({ ...prev, durationDays: true }));
                   }}
                   placeholder="30"
-                  className="w-full pl-9 pr-3.5 py-2.5 text-xs bg-neutral-50/70 focus:bg-white border border-neutral-200 rounded-xl text-neutral-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                  className={inputCls(durationBad)}
                 />
-              </div>
-              <p className="text-[10px] text-neutral-400 mt-1">
-                Runs from <strong className="text-neutral-700">{startDate}</strong> to <strong className="text-neutral-700">{endDate}</strong> ({durationDays} days).
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* 7. Forecast Tiles (4 Tiles including Est. CAC vs Target) */}
-        <div className="space-y-3 pt-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-blue-600 uppercase tracking-wider">
-              <Sparkles size={14} />
-              <span>Live Targeting Forecast</span>
-            </div>
-            <span className="text-[11px] text-neutral-400 font-medium">Real-time projection</span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-            
-            {/* Tile 1: Est. leads / day */}
-            <div className="bg-neutral-50/80 border border-neutral-200/80 rounded-xl p-4 flex flex-col justify-between">
-              <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider">
-                Est. leads / day
-              </span>
-              <div className="mt-2 flex items-baseline justify-between">
-                <span className="text-2xl font-black text-neutral-900 tracking-tight">
-                  {forecast.leadsPerDay}
-                </span>
-                <span className="text-[10px] font-semibold text-neutral-500 bg-neutral-200/60 px-1.5 py-0.5 rounded">
-                  Daily pacing
-                </span>
+                <Hint>Runs from {startDate} to {endDate} ({durationDays} days).</Hint>
+                {durationBad && <Err>Duration must be at least 1 day.</Err>}
               </div>
             </div>
 
-            {/* Tile 2: Est. total leads */}
-            <div className="bg-neutral-50/80 border border-neutral-200/80 rounded-xl p-4 flex flex-col justify-between">
-              <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider">
-                Est. total leads
-              </span>
-              <div className="mt-2 flex items-baseline justify-between">
-                <span className="text-2xl font-black text-neutral-900 tracking-tight">
-                  {forecast.totalLeads.toLocaleString('en-IN')}
-                </span>
-                <span className="text-[10px] font-semibold text-neutral-500 bg-neutral-200/60 px-1.5 py-0.5 rounded">
-                  {durationDays}d total
-                </span>
-              </div>
-            </div>
-
-            {/* Tile 3: Est. total spend */}
-            <div className="bg-neutral-50/80 border border-neutral-200/80 rounded-xl p-4 flex flex-col justify-between">
-              <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider">
-                Est. total spend
-              </span>
-              <div className="mt-2 flex items-baseline justify-between">
-                <span className="text-2xl font-black text-neutral-900 tracking-tight">
-                  ₹{forecast.totalSpend.toLocaleString('en-IN')}
-                </span>
-                <span className="text-[10px] font-semibold text-neutral-500 bg-neutral-200/60 px-1.5 py-0.5 rounded">
-                  Max spend
-                </span>
-              </div>
-            </div>
-
-            {/* Tile 4: Est. CAC vs Target (NEW 4th tile) */}
-            <div className={`border rounded-xl p-4 flex flex-col justify-between transition-all ${
-              forecast.isWithinTarget
-                ? 'bg-emerald-50/70 border-emerald-300/80 text-emerald-950'
-                : 'bg-amber-50/70 border-amber-300/80 text-amber-950'
-            }`}>
+            <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                  forecast.isWithinTarget ? 'text-emerald-700' : 'text-amber-700'
-                }`}>
-                  Est. CAC vs Target
-                </span>
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
-                  forecast.isWithinTarget 
-                    ? 'bg-emerald-600 text-white' 
-                    : 'bg-amber-600 text-white'
-                }`}>
-                  {forecast.isWithinTarget ? (
-                    <Check size={12} className="stroke-[3]" />
-                  ) : (
-                    <AlertTriangle size={12} className="stroke-[3]" />
-                  )}
-                </div>
+                <FieldLabel>Live targeting forecast</FieldLabel>
+                <span className="text-[13px] text-[#6e6e73]">Real-time projection</span>
               </div>
-
-              <div className="mt-2">
-                <div className="flex items-baseline gap-2">
-                  <span className={`text-xl font-black tracking-tight ${
-                    forecast.isWithinTarget ? 'text-emerald-900' : 'text-amber-900'
-                  }`}>
-                    ₹{forecast.expectedCAC.toLocaleString('en-IN')}
-                  </span>
-                  <span className="text-[11px] text-neutral-500 font-medium">
-                    (Target: ₹{targetCAC.toLocaleString('en-IN')})
-                  </span>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className={tile}>
+                  <div className={tileLabel}>Est. leads / day</div>
+                  <div className={tileVal}>{forecast.leadsPerDay}</div>
                 </div>
-                <p className={`text-[10.5px] font-semibold mt-1 leading-snug ${
-                  forecast.isWithinTarget ? 'text-emerald-700' : 'text-amber-800'
-                }`}>
-                  At this targeting, expected CAC is ₹{forecast.expectedCAC.toLocaleString('en-IN')}.
-                </p>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-        {/* 8. Zero-Match Warning (only when relevant) */}
-        {forecast.isZeroMatch && (
-          <div className="bg-amber-50 border border-amber-300/90 rounded-xl p-4 text-amber-900 space-y-1">
-            <div className="flex items-center gap-2 text-xs font-bold text-amber-800">
-              <AlertTriangle size={16} />
-              <span>Zero-Match Targeting Warning</span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-amber-700 font-medium">
-              {forecast.zeroMatchReason} Adjust your targeting criteria, target CAC, or budget parameters to enable campaign launch.
-            </p>
-          </div>
-        )}
-
-        {/* 9. Advanced Settings (Collapsible section, closed by default) */}
-        <div className="border border-neutral-200/80 rounded-xl overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className="w-full px-5 py-3.5 bg-neutral-50 hover:bg-neutral-100/70 transition-colors flex items-center justify-between text-left cursor-pointer"
-          >
-            <div className="flex items-center gap-2.5">
-              <SlidersHorizontal size={14} className="text-neutral-500" />
-              <span className="text-xs font-bold text-neutral-800 uppercase tracking-wide">
-                Advanced settings
-              </span>
-              <span className="text-[10px] font-semibold text-neutral-500 bg-white border border-neutral-200 px-2 py-0.5 rounded-full">
-                Secondary controls · Optional
-              </span>
-            </div>
-            <div className="flex items-center gap-1 text-xs text-neutral-500 font-medium">
-              <span>{showAdvanced ? 'Hide controls' : 'Show controls'}</span>
-              {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </div>
-          </button>
-
-          {showAdvanced && (
-            <div className="p-5 sm:p-6 bg-white space-y-6 border-t border-neutral-200/80">
-              
-              {/* Category (Multi-select chips) */}
-              <div>
-                <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-2">
-                  <span>Category Affinity Scope</span>
-                  <InfoTooltip content="Associate prospect match criteria with these high-affinity lifestyle and luxury verticals." />
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {ALL_CATEGORIES.map((cat) => {
-                    const isSelected = selectedCategories.includes(cat);
-                    return (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => toggleCategory(cat)}
-                        className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
-                          isSelected 
-                            ? 'bg-neutral-900 text-white border-neutral-900 shadow-2xs'
-                            : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50 hover:text-neutral-900'
-                        }`}
-                      >
-                        {cat}
-                      </button>
-                    );
-                  })}
+                <div className={tile}>
+                  <div className={tileLabel}>Est. total leads</div>
+                  <div className={tileVal}>{forecast.totalLeads.toLocaleString('en-IN')}</div>
+                  <div className="mt-1 text-[13px] text-[#6e6e73]">{durationDays}d total</div>
                 </div>
-              </div>
-
-              {/* Confidence (Segmented control, defaults to High) */}
-              <div>
-                <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-2">
-                  <span>Confidence Level</span>
-                  <InfoTooltip content="Match score strictness threshold. Defaults to High for maximum qualified prospect intent." />
-                </label>
-                <div className="grid grid-cols-3 gap-1.5 bg-neutral-100 p-1 rounded-xl max-w-md">
-                  {(['High', 'Medium', 'Both'] as const).map((tier) => {
-                    const isSelected = confidence === tier;
-                    return (
-                      <button
-                        key={tier}
-                        type="button"
-                        onClick={() => setConfidence(tier)}
-                        className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                          isSelected 
-                            ? 'bg-white text-neutral-900 shadow-xs'
-                            : 'text-neutral-500 hover:text-neutral-800'
-                        }`}
-                      >
-                        {tier}
-                      </button>
-                    );
-                  })}
+                <div className={tile}>
+                  <div className={tileLabel}>Est. total spend</div>
+                  <div className={tileVal}>{fmtINR(forecast.totalSpend)}</div>
                 </div>
-              </div>
-
-              {/* Toggles: Exclude Delivered & Exclude Existing */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                <div className="flex items-center justify-between p-3.5 bg-neutral-50/70 border border-neutral-200/70 rounded-xl">
-                  <div className="pr-3">
-                    <span className="text-xs font-bold text-neutral-800 block">
-                      Exclude previously-delivered leads
-                    </span>
-                    <span className="text-[10.5px] text-neutral-500">
-                      Suppress duplicate records across campaigns.
-                    </span>
+                <div className={tile}>
+                  <div className={tileLabel}>Est. CAC vs target</div>
+                  <div className={tileVal}>{fmtINR(forecast.expectedCAC)}</div>
+                  <div className={`mt-1 text-[13px] ${forecast.isWithinTarget ? 'text-[#248a3d]' : 'text-[#b25000]'}`}>
+                    {forecast.isWithinTarget ? 'Within' : 'Above'} target of {fmtINR(targetCAC)}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setExcludeDelivered(!excludeDelivered)}
-                    className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer shrink-0 focus:outline-none ${
-                      excludeDelivered ? 'bg-neutral-900' : 'bg-neutral-300'
-                    }`}
-                  >
-                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-xs transition-transform duration-200 ${
-                      excludeDelivered ? 'translate-x-4' : 'translate-x-0'
-                    }`} />
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between p-3.5 bg-neutral-50/70 border border-neutral-200/70 rounded-xl">
-                  <div className="pr-3">
-                    <span className="text-xs font-bold text-neutral-800 block">
-                      Exclude existing customers
-                    </span>
-                    <span className="text-[10.5px] text-neutral-500">
-                      Avoid marketing collision with active client accounts.
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setExcludeExisting(!excludeExisting)}
-                    className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer shrink-0 focus:outline-none ${
-                      excludeExisting ? 'bg-neutral-900' : 'bg-neutral-300'
-                    }`}
-                  >
-                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-xs transition-transform duration-200 ${
-                      excludeExisting ? 'translate-x-4' : 'translate-x-0'
-                    }`} />
-                  </button>
                 </div>
               </div>
-
-              {/* Total budget cap */}
-              <div>
-                <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
-                  <span>Total budget cap (₹)</span> <span className="text-neutral-400 font-normal ml-1">(Optional)</span>
-                  <InfoTooltip content="An absolute monetary limit that automatically pauses the campaign once reached." />
-                </label>
-                <div className="relative max-w-sm">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-xs">₹</span>
-                  <input 
-                    type="number" 
-                    value={totalBudgetCap}
-                    onChange={(e) => {
-                      const val = e.target.value === '' ? '' : parseInt(e.target.value, 10);
-                      setTotalBudgetCap(val);
-                    }}
-                    placeholder="None (run dynamically)"
-                    className="w-full pl-7 pr-3.5 py-2 text-xs bg-neutral-50/70 focus:bg-white border border-neutral-200 rounded-xl text-neutral-900 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                  />
+              {forecast.isZeroMatch && (
+                <div className="rounded-[14px] bg-[#fff8e6] px-[18px] py-4 text-sm leading-relaxed text-[#8a5a00]">
+                  <b className="font-semibold">Zero-match targeting warning.</b> {forecast.zeroMatchReason} Adjust your targeting criteria, target CAC, or budget parameters to enable campaign launch.
                 </div>
-                {totalBudgetCap !== '' && totalBudgetCap < budgetPerDay && (
-                  <p className="text-[11px] text-red-500 font-bold mt-1 flex items-center gap-1">
-                    <AlertTriangle size={12} /> Total budget cap must be at least the daily budget (₹{budgetPerDay.toLocaleString('en-IN')}).
-                  </p>
-                )}
-              </div>
+              )}
+            </div>
+          </WizardCard>
 
-              {/* Internal notes / objective */}
-              <div>
-                <label className="inline-flex items-center text-xs font-bold text-neutral-800 uppercase tracking-wide mb-1.5">
-                  <span>Internal notes / objective</span>
-                  <InfoTooltip content="Record campaign goals, qualifier notes, or team instructions for internal reporting." />
-                </label>
-                <textarea 
-                  rows={2}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Record internal campaign objectives, targeting rationale, or special qualifiers..."
-                  className="w-full px-3.5 py-2 text-xs bg-neutral-50/70 focus:bg-white border border-neutral-200 rounded-xl text-neutral-900 font-medium placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+          <WizardCard title="More options">
+            <span className="-mt-6 w-fit rounded-full bg-[#f0f0f3] px-2.5 py-[3px] text-xs font-medium text-[#6e6e73]">Optional</span>
+
+            <div className="flex flex-col gap-2">
+              <FieldLabel>Category affinity scope</FieldLabel>
+              <div className="flex flex-wrap gap-2.5">
+                {ALL_CATEGORIES.map((cat) => (
+                  <Chip key={cat} on={selectedCategories.includes(cat)} onClick={() => toggleCategory(cat)}>{cat}</Chip>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <FieldLabel hint="Match strictness">Confidence level</FieldLabel>
+              <div className="grid max-w-md grid-cols-3 gap-1 rounded-full bg-[#f0f0f3] p-1">
+                {(['High', 'Medium', 'Both'] as const).map((tier) => (
+                  <button
+                    key={tier}
+                    type="button"
+                    aria-pressed={confidence === tier}
+                    onClick={() => setConfidence(tier)}
+                    className={`h-9 rounded-full text-[15px] transition-colors ${confidence === tier ? 'bg-white font-medium text-[#1d1d1f] shadow-sm' : 'text-[#6e6e73] hover:text-[#1d1d1f]'}`}
+                  >
+                    {tier}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Toggle label="Exclude previously-delivered leads" hint="Suppress duplicate records across campaigns." on={excludeDelivered} onClick={() => setExcludeDelivered(!excludeDelivered)} />
+              <Toggle label="Exclude existing customers" hint="Avoid marketing collision with active client accounts." on={excludeExisting} onClick={() => setExcludeExisting(!excludeExisting)} />
+            </div>
+
+            <div className="flex max-w-[360px] flex-col gap-2">
+              <FieldLabel htmlFor="cb-cap" hint="Optional">Total budget cap</FieldLabel>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base text-[#6e6e73]">₹</span>
+                <input
+                  id="cb-cap"
+                  type="number"
+                  value={totalBudgetCap}
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? '' : parseInt(e.target.value, 10);
+                    setTotalBudgetCap(val);
+                  }}
+                  placeholder="None (run dynamically)"
+                  className={`${inputCls(capBad)} pl-9`}
                 />
               </div>
-
+              {capBad && <Err>Total budget cap must be at least the daily budget (₹{budgetPerDay.toLocaleString('en-IN')}).</Err>}
             </div>
-          )}
-        </div>
 
-        {/* 10. Actions Footer: Save as draft / Launch */}
-        <div className="pt-4 border-t border-neutral-200/80 flex flex-col sm:flex-row items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold text-neutral-600 hover:text-neutral-900 bg-transparent hover:bg-neutral-100 rounded-xl transition-all cursor-pointer text-center"
-          >
-            Cancel
-          </button>
+            <div className="flex flex-col gap-2">
+              <FieldLabel htmlFor="cb-notes">Internal notes / objective</FieldLabel>
+              <textarea
+                id="cb-notes"
+                rows={3}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Record internal campaign objectives, targeting rationale, or special qualifiers..."
+                className="w-full rounded-xl border border-[#d2d2d7] bg-white px-4 py-3 text-base text-[#1d1d1f] outline-none focus:border-[#0071e3]"
+              />
+            </div>
+          </WizardCard>
+        </>
+      )}
 
-          <button
-            type="button"
-            onClick={() => handleSubmit('Draft')}
-            className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 rounded-xl shadow-2xs transition-all focus:outline-none active:scale-98 cursor-pointer"
-          >
-            Save as draft
-          </button>
+      {step === 3 && (
+        <TopEmailsStep
+          emails={emails}
+          onChange={setEmails}
+          lead="Pick five of your best customers. They help our model learn what a great match looks like, so your results are more accurate."
+          noteTail="not added to your audience"
+        />
+      )}
 
-          <button
-            type="button"
-            disabled={!isFormValid}
-            onClick={() => handleSubmit('Active')}
-            className={`w-full sm:w-auto px-7 py-2.5 text-xs font-bold text-white rounded-xl shadow-sm transition-all focus:outline-none flex items-center justify-center gap-2 ${
-              !isFormValid
-                ? 'bg-neutral-300 cursor-not-allowed text-neutral-500'
-                : 'bg-blue-600 hover:bg-blue-700 active:scale-98 cursor-pointer shadow-blue-500/20 shadow-md'
-            }`}
-          >
-            <span>Launch campaign</span>
-            <ArrowRight size={13} className="stroke-[2.5]" />
-          </button>
-        </div>
+      {step === 4 && (
+        <ReviewConsentStep
+          kind="leadgen"
+          actionWord="launch"
+          sections={reviewSections}
+          acks={acks}
+          onToggle={(i) => setAcks(prev => prev.map((v, idx) => (idx === i ? !v : v)))}
+        />
+      )}
 
-      </div>
+      {step < 4 ? (
+        <WizardFooter
+          step={step}
+          onBack={goBack}
+          onNext={goNext}
+          nextLabel="Continue"
+          nextDisabled={step === 3 && !emailsComplete(emails)}
+        />
+      ) : (
+        <WizardFooter
+          step={step}
+          onBack={goBack}
+          onDraft={() => handleSubmit('Draft')}
+          onNext={() => handleSubmit('Active')}
+          nextLabel="Launch campaign"
+          nextDisabled={!(allAcked && isFormValid && emailsComplete(emails))}
+        />
+      )}
     </div>
   );
 };

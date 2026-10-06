@@ -38,6 +38,7 @@ import { CustomerInsightBuilder } from './CustomerInsightBuilder';
 import { CustomerInsightManagement } from './CustomerInsightManagement';
 import { CustomerInsightFeed } from './CustomerInsightFeed';
 import { LeadQualCampaignBuilder } from './LeadQualCampaignBuilder';
+import type { CampaignConsent } from './campaign-builder/wizard';
 
 export interface QualFile {
   id: string;
@@ -88,6 +89,8 @@ export interface QualCampaign {
   files: QualFile[];
   isArchived?: boolean;
   activityLog?: string[];
+  topEmails?: string[];
+  consent?: CampaignConsent;
 }
 
 export interface QualRecord {
@@ -1196,6 +1199,8 @@ export const LeadQualification: React.FC<LeadQualificationProps> = ({
             totalSpend: c.totalSpend + completedFile.cost,
             hasRunFirstFile: true,
             files: updatedFiles,
+            topEmails: rest.topEmails ?? c.topEmails,
+            consent: rest.consent ?? c.consent,
             status: 'Processing',
             activityLog: [
               ...(c.activityLog || []),
@@ -1224,6 +1229,8 @@ export const LeadQualification: React.FC<LeadQualificationProps> = ({
         notes: rest.notes || "",
         industry: rest.industry || "Automobile",
         hasRunFirstFile: true,
+        topEmails: rest.topEmails,
+        consent: rest.consent,
         weights: { incomeWeight: 50, spendWeight: 30, propensityWeight: 20 },
         confidenceStats: { 
           high: Math.round(completedFile.rowsAccepted * 0.55), 
@@ -1365,6 +1372,8 @@ export const LeadQualification: React.FC<LeadQualificationProps> = ({
           totalSpend: existing.totalSpend + completedFile.cost,
           hasRunFirstFile: true,
           files: newFiles,
+          topEmails: rest.topEmails ?? existing.topEmails,
+          consent: rest.consent ?? existing.consent,
           activityLog: [
             ...(existing.activityLog || []),
             `Secondary run completed: processed ${completedFile.fileName} adding ${completedFile.rowsAccepted} scored records safely. (Cost: ₹${completedFile.cost})`
@@ -1406,6 +1415,8 @@ export const LeadQualification: React.FC<LeadQualificationProps> = ({
           files: [completedFile],
           useCaseTag: rest.useCaseTag || 'Engagement',
           totalBudgetCap: rest.totalBudgetCap || '',
+          topEmails: rest.topEmails,
+          consent: rest.consent,
           activityLog: [
             `Campaign created by Priya Sharma on ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`,
             `RACE Insight settings locked: ${rest.industry} | ${rest.customerSegment}`,
