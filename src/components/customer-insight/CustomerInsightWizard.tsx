@@ -114,7 +114,7 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
   // ---------------------------------------------------------------- step 1
   const handleRunIdentityMatch = () => runWithOverlay(
     [
-      'Connecting to OSINT Industries & Behind the Email...',
+      'Connecting to Source 1 & Source 2...',
       'Verifying domain routing & email hash...',
       'Reading module footprints across vendors...',
       'Merging de-duplicated profile records...',
@@ -329,7 +329,7 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
     {
       num: 2,
       title: 'Identity match',
-      subtitle: data.step >= 2 ? `${data.identityStats.modulesFound} modules found` : 'Two vendors',
+      subtitle: data.step >= 2 ? `${data.identityStats.modulesFound} modules found` : 'Two sources',
     },
     {
       num: 3,

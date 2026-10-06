@@ -16,11 +16,15 @@ import type { Categories } from '../RaceCategories';
 
 type Patch = Partial<CustomerInsightRunData>;
 
-const VENDOR_LABEL: Record<string, string> = {
-  osint: 'OSINT Industries', osint_industries: 'OSINT Industries',
-  bte: 'Behind the Email', behindtheemail: 'Behind the Email',
+/** Vendors are shown as Source 1 / Source 2 on screen. */
+const SOURCE_NAME: Record<string, string> = {
+  osint: 'Source 1', osint_industries: 'Source 1',
+  bte: 'Source 2', behind_the_email: 'Source 2', behindtheemail: 'Source 2',
 };
-const vendorLabel = (v: string) => VENDOR_LABEL[v] ?? v;
+const vendorLabel = (v: string) => SOURCE_NAME[v.toLowerCase().replace(/[\s-]+/g, '_')] ?? v;
+const scrubVendorNames = (t: string) =>
+  t.replace(/\bosint_industries\b|\bosint\b/gi, 'Source 1')
+   .replace(/\bbehind_the_email\b|\bbte\b/gi, 'Source 2');
 
 const initials = (s: string) =>
   s.replace(/[^A-Za-z0-9 ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2)
@@ -40,8 +44,8 @@ export function mapRun(run: Run, email: string): Patch {
   const both = new Set((v?.corroborated ?? []).map((x) => x.toLowerCase()));
   const verified = (m: string) => both.has(m.toLowerCase());
   const by = v?.bySource ?? {};
-  const pick = (k: string) => {
-    const e: any = by[k] ?? Object.entries(by).find(([n]) => vendorLabel(n) === vendorLabel(k))?.[1];
+  const pick = (label: 'Source 1' | 'Source 2') => {
+    const e: any = Object.entries(by).find(([n]) => vendorLabel(n) === label)?.[1];
     return { detailed: e?.rich ?? 0, registered: e?.registered ?? 0, breach: e?.breached ?? 0 };
   };
 
@@ -80,11 +84,11 @@ export function mapRun(run: Run, email: string): Patch {
       timelineEvents: v?.counts.timelineEvents ?? 0,
     },
     vendorBreakdown: {
-      osint: pick('osint'), bte: pick('bte'),
+      osint: pick('Source 1'), bte: pick('Source 2'),
       foundByBoth: (v?.corroborated ?? []).map(cap),
     },
     identityRows: rows,
-    runLog: (run.steps ?? []).map((s) => ({ time: s.t?.slice(11, 19) ?? '', message: s.msg })),
+    runLog: (run.steps ?? []).map((s) => ({ time: s.t?.slice(11, 19) ?? '', message: scrubVendorNames(s.msg) })),
   };
 }
 

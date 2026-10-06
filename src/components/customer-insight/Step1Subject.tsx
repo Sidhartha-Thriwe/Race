@@ -241,13 +241,13 @@ export const Step1Subject: React.FC<Step1SubjectProps> = ({
 
           <div className="space-y-3 pt-2 border-t border-neutral-100">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-neutral-800">OSINT Industries</span>
+              <span className="font-semibold text-neutral-800">Source 1</span>
               <span className="px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/60 rounded-full">
                 Connected
               </span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-neutral-800">Behind the Email</span>
+              <span className="font-semibold text-neutral-800">Source 2</span>
               <span className="px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/60 rounded-full">
                 Key verified
               </span>

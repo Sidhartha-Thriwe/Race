@@ -24,7 +24,9 @@ export const Step2IdentityMatch: React.FC<Step2IdentityMatchProps> = ({
       ? row.category === 'detailed'
       : activeTab === 'registered'
       ? row.category === 'registered'
-      : true;
+      : activeTab === 'breach'
+      ? row.category === 'breach'
+      : row.category === 'timeline';
     const matchesSearch = row.platform.toLowerCase().includes(searchQuery.toLowerCase()) ||
       row.keySignals.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesTab && matchesSearch;
@@ -87,7 +89,7 @@ export const Step2IdentityMatch: React.FC<Step2IdentityMatchProps> = ({
             {data.identityStats.detailedProfiles}
           </div>
           <div className="text-xs font-medium text-neutral-500 mt-1">
-            Detailed profiles
+            Found detailed profiles
           </div>
         </div>
 
@@ -96,7 +98,7 @@ export const Step2IdentityMatch: React.FC<Step2IdentityMatchProps> = ({
             {data.identityStats.registeredOnly}
           </div>
           <div className="text-xs font-medium text-neutral-500 mt-1">
-            Registered only
+            Only profiles
           </div>
         </div>
 
@@ -105,18 +107,8 @@ export const Step2IdentityMatch: React.FC<Step2IdentityMatchProps> = ({
             {data.identityStats.breachRecords}
           </div>
           <div className="text-xs font-medium text-neutral-500 mt-1">
-            Breach records
+            Footprints
           </div>
-        </div>
-      </div>
-
-      {/* Cost Card */}
-      <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-xs">
-        <div className="text-2xl font-bold tracking-tight text-neutral-900 tabular-nums">
-          ₹{data.vendorSpendINR.toFixed(2)}
-        </div>
-        <div className="text-xs font-medium text-neutral-500 mt-0.5">
-          Cost
         </div>
       </div>
 
@@ -129,22 +121,22 @@ export const Step2IdentityMatch: React.FC<Step2IdentityMatchProps> = ({
           <div className="flex items-center gap-4 text-xs font-medium text-neutral-600">
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-[#1e293b]" />
-              <span>Detailed</span>
+              <span>Found detailed profiles</span>
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-[#64748b]" />
-              <span>Registered</span>
+              <span>Only profiles</span>
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-[#c2410c]" />
-              <span>Breach</span>
+              <span>Footprints</span>
             </span>
           </div>
         </div>
 
         {/* Stacked Bars */}
         <div className="space-y-4">
-          {([['OSINT Industries', data.vendorBreakdown.osint], ['Behind the Email', data.vendorBreakdown.bte]] as const).map(([label, v]) => {
+          {([['Source 1', data.vendorBreakdown.osint], ['Source 2', data.vendorBreakdown.bte]] as const).map(([label, v]) => {
             const tot = Math.max(1, v.detailed + v.registered + v.breach);
             const seg = (n: number, cls: string, first = false) => n > 0 ? (
               <div style={{ width: `${(n / tot) * 100}%` }}
@@ -195,7 +187,7 @@ export const Step2IdentityMatch: React.FC<Step2IdentityMatchProps> = ({
                   : 'text-neutral-500 hover:text-neutral-800'
               }`}
             >
-              Detailed {data.identityStats.detailedProfiles}
+              Found detailed profiles {data.identityStats.detailedProfiles}
             </button>
             <button
               type="button"
@@ -206,7 +198,7 @@ export const Step2IdentityMatch: React.FC<Step2IdentityMatchProps> = ({
                   : 'text-neutral-500 hover:text-neutral-800'
               }`}
             >
-              Registered {data.identityStats.registeredOnly}
+              Only Profiles {data.identityStats.registeredOnly}
             </button>
             <button
               type="button"
@@ -217,7 +209,7 @@ export const Step2IdentityMatch: React.FC<Step2IdentityMatchProps> = ({
                   : 'text-neutral-500 hover:text-neutral-800'
               }`}
             >
-              Breaches {data.identityStats.breachRecords}
+              Footprints {data.identityStats.breachRecords}
             </button>
             <button
               type="button"
@@ -307,7 +299,7 @@ export const Step2IdentityMatch: React.FC<Step2IdentityMatchProps> = ({
         {/* Table Footer */}
         <div className="flex items-center justify-between text-xs text-neutral-500 pt-1">
           <span>
-            Showing {displayedRows.length} of {filteredRows.length} · Breach records show count and date only
+            Showing {displayedRows.length} of {filteredRows.length} · Footprint records show count and date only
           </span>
           {filteredRows.length > 6 && (
             <button
