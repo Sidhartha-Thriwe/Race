@@ -30,7 +30,9 @@ const initials = (s: string) =>
   s.replace(/[^A-Za-z0-9 ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2)
     .map((w) => w[0]!.toUpperCase()).join('') || '··';
 
-const cap = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
+const ACRONYMS: Record<string, string> = { hibp: 'HIBP', linkedin: 'LinkedIn', github: 'GitHub' };
+const cap = (s: string) =>
+  ACRONYMS[s.toLowerCase()] ?? (s ? s[0]!.toUpperCase() + s.slice(1) : s);
 
 const sourceLabel = (r: any): string => {
   const src: string[] = Array.isArray(r.sources) ? r.sources : r.source ? [r.source] : [];
@@ -67,9 +69,14 @@ export function mapRun(run: Run, email: string): Patch {
     rows.push({ platform: r.title || cap(r.module), keySignals: sig, verified: false,
                 source: sourceLabel(r), category: 'breach' });
   }
+  // A timeline event has no source of its own; it takes the source of the
+  // account or breach row for the same module, and says so when there is none.
+  const moduleSource = new Map(rows.map((r) => [r.platform.toLowerCase(), r.source]));
   for (const r of v?.timeline ?? []) {
     rows.push({ platform: cap(r.module), keySignals: [r.start?.slice(0, 10), r.content].filter(Boolean).map(String).slice(0, 2),
-                verified: verified(r.module), source: sourceLabel(r), category: 'timeline' });
+                verified: verified(r.module),
+                source: sourceLabel(r) !== '—' ? sourceLabel(r) : (moduleSource.get(cap(r.module).toLowerCase()) ?? '—'),
+                category: 'timeline' });
   }
 
   return {
