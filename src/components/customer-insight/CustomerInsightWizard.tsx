@@ -514,12 +514,12 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
                 <>
                   <div className="flex items-center justify-between text-neutral-600">
                     <span>Spent so far</span>
-                    <span className="font-mono font-bold text-neutral-900 tabular-nums">₹0.00</span>
+                    <span className="font-mono font-bold text-neutral-900 tabular-nums">***</span>
                   </div>
                   <div className="flex items-center justify-between text-neutral-600">
                     <span>Month to date</span>
                     <span className="font-mono font-bold text-neutral-900 tabular-nums">
-                      ₹{data.monthToDateINR.toFixed(2)}
+                      ***
                     </span>
                   </div>
                 </>
@@ -528,13 +528,13 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
                   <div className="flex items-center justify-between text-neutral-600">
                     <span>Vendor spend</span>
                     <span className="font-mono font-bold text-neutral-900 tabular-nums">
-                      ₹{data.vendorSpendINR.toFixed(2)}
+                      ***
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-neutral-600">
                     <span>Month to date</span>
                     <span className="font-mono font-bold text-neutral-900 tabular-nums">
-                      ₹{data.monthToDateINR.toFixed(2)}
+                      ***
                     </span>
                   </div>
                 </>
@@ -543,12 +543,12 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
                   <div className="flex items-center justify-between text-neutral-600">
                     <span>Vendor spend</span>
                     <span className="font-mono font-bold text-neutral-900 tabular-nums">
-                      ₹{data.vendorSpendINR.toFixed(2)}
+                      ***
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-neutral-600">
                     <span>Source plan</span>
-                    <span className="font-semibold text-neutral-800">Free</span>
+                    <span className="font-semibold text-neutral-800">***</span>
                   </div>
                 </>
               ) : (
@@ -556,13 +556,13 @@ export const CustomerInsightWizard: React.FC<CustomerInsightWizardProps> = ({
                   <div className="flex items-center justify-between text-neutral-600">
                     <span>Vendor spend</span>
                     <span className="font-mono font-bold text-neutral-900 tabular-nums">
-                      ₹{data.vendorSpendINR.toFixed(2)}
+                      ***
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-neutral-600">
                     <span>Fetch spend</span>
                     <span className="font-mono font-bold text-neutral-900 tabular-nums">
-                      ${data.fetchSpendUSD.toFixed(2)}
+                      ***
                     </span>
                   </div>
                   {data.step >= 5 && (

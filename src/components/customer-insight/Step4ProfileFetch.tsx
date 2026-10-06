@@ -45,7 +45,7 @@ export const Step4ProfileFetch: React.FC<Step4ProfileFetchProps> = ({
           </p>
         </div>
         <div className="self-start sm:self-center text-xs font-mono font-bold text-neutral-600">
-          {profileFetch.duration} · ${profileFetch.totalSpendUSD.toFixed(2)}
+          {profileFetch.duration} · ***
         </div>
       </div>
 
@@ -122,7 +122,7 @@ export const Step4ProfileFetch: React.FC<Step4ProfileFetchProps> = ({
                       {prof.platform}
                     </div>
                     <div className="text-[11px] font-mono text-neutral-400">
-                      {prof.duration} · ${prof.costUSD.toFixed(2)}
+                      {prof.duration} · ***
                     </div>
                   </div>
                 </div>
